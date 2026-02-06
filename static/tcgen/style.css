@@ -1,0 +1,1336 @@
+:root{
+  /* Brand */
+  --b-deep:#1B0096;
+  --b-purple:#6200D0;
+  --b-magenta:#B53A99;
+  --b-pink:#E5365C;
+
+  /* UI */
+  --bg:#F6F7FB;
+  --surface:#FFFFFF;
+  --text:#1F2330;
+  --muted:#667085;
+
+  --radius-xl:22px;
+  --radius-lg:18px;
+  --radius-md:16px;
+  --radius-sm:14px;
+
+  --shadow:0 12px 28px rgba(16,24,40,0.10);
+  --shadow-hover:0 18px 40px rgba(16,24,40,0.14);
+
+  --border:rgba(98,0,208,0.14);
+  --border-soft:rgba(98,0,208,0.12);
+  --divider:rgba(16,24,40,0.08);
+
+  --focus:rgba(98,0,208,0.35);
+
+  /* Buttons */
+  --btn-h:46px;
+  --btn-r:14px;
+  --btn-fs:14px;
+  --btn-px:18px;
+  --btn-fw:700;
+
+  /* Layout */
+  --container:1180px;
+
+/* Typography (Enterprise / Microsoft-friendly) */
+  --font-sans: "Segoe UI", "Segoe UI Variable", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --font-body: var(--font-sans);
+  --font-display: var(--font-sans);
+
+  /* Type scale */
+  --text-xxl: 2rem;      /* 32px */
+  --text-xl: 1.5rem;     /* 24px */
+  --text-lg: 1.25rem;    /* 20px */
+  --text-md: 1rem;       /* 16px */
+  --text-sm: 0.875rem;   /* 14px */
+  --text-xs: 0.75rem;    /* 12px */
+
+  /* Line-heights */
+  --lh-tight: 1.15;
+  --lh-snug: 1.25;
+  --lh-body: 1.6;
+
+  /* Weights */
+  --w-regular: 400;
+  --w-medium: 500;
+  --w-semibold: 600;
+  --w-bold: 700;
+  --w-black: 700;
+
+  /* UI tracking */
+  --ls-ui: 0.02em;
+}
+
+/* ===== Base / Reset (simple y seguro) ===== */
+*,
+*::before,
+*::after{
+  box-sizing:border-box;
+}
+
+html, body{
+  height:100%;
+}
+
+body{
+  margin:0;
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: var(--lh-body);
+  font-weight: var(--w-regular);
+  background:var(--bg);
+  color:var(--text);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+img{
+  max-width:100%;
+  height:auto;
+  display:block;
+}
+
+a{
+  color:var(--b-purple);
+  text-decoration:none;
+}
+a:hover{
+  text-decoration:underline;
+}
+
+:focus-visible{
+  outline:3px solid var(--focus);
+  outline-offset:2px;
+  border-radius:var(--radius-sm);
+}
+
+/* ==========================================================================
+   Layout
+   ========================================================================== */
+
+.page{
+  max-width:var(--container);
+  margin:0 auto;
+  padding:1.2rem 1rem 2rem;
+}
+
+.page-inner{
+  display:grid;
+  gap:18px;
+}
+
+/* Divider */
+.hr{
+  height:1px;
+  background:var(--divider);
+  margin:16px 0;
+}
+
+/* ==========================================================================
+   Card
+   ========================================================================== */
+
+.card{
+  background:var(--surface);
+  border:1.8px solid var(--border);
+  border-radius:var(--radius-xl);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+  padding:26px;
+}
+
+/* ==========================================================================
+   Header Beecker
+   ========================================================================== */
+
+.beecker-header{
+  max-width:var(--container);
+  margin:1rem auto 0;
+  padding:14px 18px;
+
+      background:
+    radial-gradient(ellipse at right top,
+      rgba(98,0,208,0.14) 0%,
+      rgba(229,54,92,0.08) 26%,
+      rgba(255,255,255,0) 62%
+    ),
+    var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-xl);
+  box-shadow:var(--shadow);
+
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+}
+
+.bh-left,
+.bh-right{
+  display:flex;
+  align-items:center;
+  min-width:120px;
+}
+
+.bh-right{
+  justify-content:flex-end;
+}
+
+.bh-left img,
+.bh-right img{
+  height:42px;
+  width:auto;
+}
+
+.bh-center{
+  flex:1;
+  text-align:center;
+  line-height:1.1;
+}
+
+.bh-title{
+  margin:0;
+  font-size:var(--text-xxl);      
+  line-height:var(--lh-tight);
+  font-weight:var(--w-black);     
+  letter-spacing:-0.02em;
+  color:var(--text);
+  
+}
+
+/* ==========================================================================
+   Upload / Ready headers
+   ========================================================================== */
+
+.upload-head,
+.ready-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+}
+
+.upload-title{
+  font-size:var(--text-xl);      
+  line-height:var(--lh-snug);
+  font-weight:var(--w-black);
+  letter-spacing:-0.02em;
+  margin:0;
+  color:var(--text);
+}
+
+
+.upload-sub,
+.ready-sub{
+  margin-top:6px;
+  color:var(--muted);
+  font-size:var(--text-sm);       
+  line-height:1.5;
+}
+
+.ready-title{
+  font-size:var(--text-lg);      
+  line-height:var(--lh-snug);
+  font-weight:var(--w-black);
+  letter-spacing:-0.02em;
+  color:var(--text);
+  margin:0;
+}
+
+.upload-badges,
+.ready-badges{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap:8px;
+}
+
+.badge-mini{
+
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+
+  padding:7px 12px;
+  border-radius:999px;
+
+  font-size:var(--text-xs);       /* 12px */
+  font-weight:var(--w-semibold);
+  letter-spacing:var(--ls-ui);
+  color:var(--b-purple);
+
+  border:1px solid rgba(98,0,208,0.18);
+  background:rgba(98,0,208,0.06);
+
+  white-space:nowrap;
+}
+
+.label{
+  font-size: var(--text-xs);
+  font-weight: var(--w-semibold);
+  letter-spacing: var(--ls-ui);
+  color: var(--text);
+}
+
+
+
+/* ============================
+   Uploader layout (KEEP your container styling)
+   ============================ */
+.uploader{
+  /* Conserva TODO lo que ya tienes */
+  padding:16px;
+  border-radius:var(--radius-lg);
+  border:1.8px solid var(--border);
+
+  transition:transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+
+  /* NUEVO: layout */
+  display:flex;
+  align-items:center;
+  gap:14px;
+}
+
+
+.uploader:focus-within{
+  border-color:rgba(98,0,208,0.28);
+  box-shadow:0 18px 40px rgba(16,24,40,0.14);
+}
+
+/* ============================
+   Hide native input (keep functional)
+   ============================ */
+.uploader input[type="file"].native-file{
+  position:absolute;
+  width:1px;
+  height:1px;
+  padding:0;
+  margin:-1px;
+  overflow:hidden;
+  clip:rect(0,0,0,0);
+  white-space:nowrap;
+  border:0;
+}
+
+/* ============================
+   Custom file UI (same drop look as your old input)
+   ============================ */
+.uploader{ position: relative; }
+.uploader .file-ui{
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  padding: 14px;
+  border-radius: 18px;
+  /* ✅ Usa border SOLID para que el borde gradiente funcione bien */
+  border: 1.6px solid transparent;
+  /* normaliza estilos por defecto del button */
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: transparent;
+  transition: transform 160ms ease, filter 160ms ease, box-shadow 160ms ease;
+
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  cursor: pointer;
+  user-select: none;
+  font-family: inherit;
+}
+
+
+.uploader .file-ui:active{
+  transform:translateY(0);
+}
+
+.uploader .file-ui:focus-visible{
+  outline:3px solid var(--focus);
+  outline-offset:4px;
+}
+
+/* Browse button: replica tu ::file-selector-button */
+.uploader .file-ui__btn{
+  height:44px;
+  padding:0 16px;
+
+  display:inline-flex;
+  align-items:center;
+
+  border-radius:var(--btn-r);
+  border:1px solid rgba(98,0,208,0.22);
+  background:rgba(255,255,255,0.96);
+  box-shadow:0 14px 24px rgba(16,24,40,0.10);
+
+  font-weight:var(--btn-fw);
+  font-size:var(--btn-fs);
+  color:var(--b-purple);
+
+  transition:transform 160ms ease, filter 160ms ease, box-shadow 160ms ease;
+}
+
+.uploader .file-ui:hover .file-ui__btn{
+  filter:brightness(1.02);
+  transform:translateY(-1px);
+  box-shadow:0 12px 22px rgba(98,0,208,0.20);
+}
+
+/* Hint text: UX mejor (alineado, no “flotando” feo) */
+.uploader .file-ui__text{
+  min-width:0;
+  flex:1;
+
+  text-align:left;
+  color:var(--muted);
+  font-weight:700;
+
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+
+  opacity:0.92;
+}
+
+/* ============================
+   Orb button: ensure it stays visible and aligned
+   ============================ */
+.uploader .upload-orb{
+  flex:0 0 auto;      /* no se estira */
+  z-index:5;          /* por encima de la fila */
+}
+
+/* Responsive: si queda muy apretado, baja el orb abajo */
+@media (max-width: 520px){
+  .uploader{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .uploader .upload-orb{
+    align-self:flex-end;
+  }
+}
+
+/* ===== File pill (cuando ya hay archivo) ===== */
+#filePill.file-pill{
+  margin-top:14px;
+  border:1px solid var(--border-soft);
+  box-shadow:0 12px 22px rgba(16,24,40,0.08);
+  background: transparent;
+}
+
+.file-pill .meta{
+  min-width:0;
+}
+
+.file-pill .name{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width:560px;
+}
+
+.file-pill .badge-mini{
+  border-color:rgba(34,197,94,0.25);
+  background:rgba(34,197,94,0.10);
+  color:#15803d;
+}
+
+/* Botón X un poco más “premium” */
+.pill-x{
+  box-shadow:0 12px 20px rgba(16,24,40,0.08);
+}
+
+.pill-x:hover{
+  box-shadow:0 14px 24px rgba(98,0,208,0.18);
+}
+
+/* Responsive */
+@media (max-width:720px){
+  .file-pill .name{ max-width:100%; }
+}
+/* ==========================================================================
+   Form
+   ========================================================================== */
+
+.form{
+  display:grid;
+  gap:14px;
+}
+
+.field{
+  display:grid;
+  gap:6px;
+}
+
+.help{
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.2rem;
+}
+
+.note{
+  margin:0;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.2rem;
+}
+
+/* Inputs */
+input[type="text"]{
+  width:100%;
+  height:44px;
+  padding:0 12px;
+  border-radius:14px;
+  border:1px solid rgba(98,0,208,0.18);
+  background:rgba(255,255,255,0.95);
+  box-shadow:0 10px 18px rgba(16,24,40,0.06);
+  font-weight:700;
+  outline:none;
+}
+
+input[type="text"]::placeholder{
+  color:rgba(102,112,133,0.8);
+  font-weight:600;
+}
+
+/* File input base */
+input[type="file"]:not(.native-file){
+  width:100%;
+  padding:14px;
+  border-radius:18px;
+
+  border:1.5px dashed transparent;
+    background:
+    linear-gradient(#FBFBFE, #FBFBFE) padding-box,
+    linear-gradient(135deg,
+      rgba(27,0,150,0.40),
+      rgba(98,0,208,0.32),
+      rgba(229,54,92,0.28)
+    ) border-box;
+}
+
+/* ==========================================================================
+   CTA row (centrar botón como en Streamlit columns)
+   ========================================================================== */
+
+.cta-wrap{
+  margin-top:16px;
+  padding-top:16px;
+  border-top:1px solid var(--divider);
+}
+
+.cta-row{
+  display:grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items:center;
+  gap:10px;
+}
+
+.cta-spacer{
+  min-height:1px;
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+
+.btn{
+  height:var(--btn-h);
+  border-radius:var(--btn-r);
+  font-weight:var(--btn-fw);
+  font-size:var(--btn-fs);
+  padding:0 var(--btn-px);
+  line-height:1;
+
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+
+  cursor:pointer;
+  user-select:none;
+
+  border:0;
+  transition:transform 160ms ease, filter 160ms ease, box-shadow 160ms ease;
+}
+
+.btn:disabled{
+  opacity:0.65;
+  cursor:not-allowed;
+}
+
+.btn-primary{
+  color:#fff;
+  background:linear-gradient(90deg,var(--b-deep),var(--b-purple),var(--b-pink));
+  box-shadow:0 12px 22px rgba(98,0,208,0.20);
+}
+
+.btn-primary:hover{
+  filter:brightness(1.07);
+  transform:translateY(-1px);
+  box-shadow:0 16px 30px rgba(98,0,208,0.26);
+}
+
+.btn-primary:active{
+  transform:translateY(0);
+  filter:brightness(0.98);
+}
+
+.btn-secondary{
+  color:#fff;
+  background:linear-gradient(90deg,var(--b-deep),var(--b-purple),var(--b-pink));
+  box-shadow:0 12px 22px rgba(98,0,208,0.20);
+}
+
+.btn-secondary:hover{
+  filter:brightness(1.07);
+  transform:translateY(-1px);
+  box-shadow:0 16px 30px rgba(98,0,208,0.26);
+}
+
+.btn-secondary:active{
+  transform:translateY(0);
+  filter:brightness(0.98);
+}
+
+/* ==========================================================================
+   File pill (archivo cargado) + botón X
+   ========================================================================== */
+
+.file-pill{
+  margin-top:12px;
+  padding:10px 12px;
+  border-radius:16px;
+
+  background:rgba(255,255,255,0.92);
+  border:1px solid var(--border-soft);
+  box-shadow:0 10px 18px rgba(16,24,40,0.06);
+
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.file-pill .meta{
+  display:grid;
+  gap:2px;
+}
+
+.file-pill .name{
+  font-weight:900;
+  color:var(--text);
+  font-size:13px;
+}
+
+.file-pill .size{
+  font-size:12px;
+  color:var(--muted);
+}
+
+.file-pill--with-x{
+  padding-right:112px; /* espacio para badge + botón X */
+  position:relative;
+}
+
+.pill-x{
+  position:absolute;
+  right:12px;
+  top:50%;
+  transform:translateY(-50%);
+
+  width:44px;
+  height:44px;
+  min-width:44px;
+
+  border-radius:14px;
+  border:1px solid rgba(98,0,208,0.20);
+  background:rgba(255,255,255,0.95);
+  color:var(--b-purple);
+
+  font-weight:900;
+  cursor:pointer;
+
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+
+  box-shadow:0 10px 18px rgba(16,24,40,0.06);
+  transition:transform 160ms ease, filter 160ms ease, box-shadow 160ms ease;
+}
+
+.pill-x:hover{
+  filter:brightness(1.02);
+  transform:translateY(calc(-50% - 1px));
+  box-shadow:0 14px 24px rgba(16,24,40,0.10);
+}
+
+.pill-x:active{
+  transform:translateY(-50%);
+}
+
+/* ==========================================================================
+   Alerts
+   ========================================================================== */
+
+.alert{
+  border-radius:16px;
+  padding:12px 14px;
+  border:1px solid var(--divider);
+  box-shadow:0 10px 18px rgba(16,24,40,0.06);
+  font-size:13px;
+}
+
+.alert + .alert{
+  margin-top:10px;
+}
+
+.alert-success{
+  background:rgba(34,197,94,0.10);
+  border-color:rgba(34,197,94,0.25);
+}
+
+.alert-error{
+  background:rgba(239,68,68,0.10);
+  border-color:rgba(239,68,68,0.25);
+}
+
+/* ==========================================================================
+   Metrics (ready card)
+   ========================================================================== */
+
+.metrics{
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap:12px;
+}
+
+.metric{
+  background:rgba(255,255,255,0.92);
+  border:1px solid var(--border-soft);
+  border-radius:16px;
+  padding:12px 14px;
+  box-shadow:0 10px 18px rgba(16,24,40,0.06);
+}
+
+.metric-label{
+  color:var(--muted);
+  font-size:var(--text-xs);       
+  font-weight:var(--w-semibold);
+  letter-spacing:var(--ls-ui);
+}
+
+
+.metric-value{
+  margin-top:6px;
+  font-size:1.375rem;             
+  line-height:1.1;
+  font-weight:var(--w-black);
+  color:var(--text);
+
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ==========================================================================
+   Overlay (loading)
+   Por default oculto. Se muestra cuando JS agrega la clase .show
+   ========================================================================== */
+
+.beecker-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(246,247,251,0.88);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+
+  z-index:99999;
+  padding:18px;
+
+  display:none;
+  place-items:center;
+}
+
+.beecker-overlay.show{
+  display:grid;
+}
+
+.beecker-overlay-card{
+  width:min(520px, 92vw);
+  border-radius:var(--radius-xl);
+  border:1px solid rgba(98,0,208,0.18);
+  box-shadow:0 22px 60px rgba(16,24,40,0.18);
+  padding:18px 18px 16px 18px;
+  overflow:hidden;
+
+  background:
+    radial-gradient(ellipse at right top,
+      rgba(98,0,208,0.18) 0%,
+      rgba(229,54,92,0.12) 26%,
+      rgba(255,255,255,0) 62%
+    ),
+    #FFFFFF;
+}
+
+.beecker-loader-row{
+  display:flex;
+  align-items:center;
+  gap:16px;
+}
+
+.beecker-spinner{
+  width:60px;
+  height:60px;
+  border-radius:999px;
+
+  border:6px solid rgba(98,0,208,0.16);
+  border-top-color:var(--b-pink);
+  border-right-color:var(--b-purple);
+
+  animation:beeckerSpin 0.95s linear infinite;
+  box-shadow:0 14px 24px rgba(98,0,208,0.14);
+
+  flex:0 0 auto;
+}
+
+@keyframes beeckerSpin{
+  to{ transform:rotate(360deg); }
+}
+
+.beecker-loader-title{
+  font-weight:var(--w-black);
+  font-size:var(--text-lg);   
+  line-height:var(--lh-snug);
+  color:var(--text);
+  margin:0;
+}
+
+.beecker-loader-sub{
+  font-size:var(--text-sm); 
+  color:var(--muted);
+  margin-top:4px;
+  line-height:1.5;
+}
+
+.bh-title,
+.upload-title,
+.ready-title,
+.beecker-loader-title{
+  font-family: var(--font-display);
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 920px){
+  .bh-title{ font-size:26px; }
+  .bh-left, .bh-right{ min-width:80px; }
+  .bh-left img, .bh-right img{ height:36px; }
+
+  .metrics{ grid-template-columns:1fr; }
+}
+
+@media (max-width: 720px){
+  .page{ padding:0.9rem 1rem 1.6rem; }
+
+  .beecker-header{
+    flex-direction:column;
+    align-items:center;
+    text-align:center;
+  }
+
+  .bh-left, .bh-right{ min-width:unset; }
+  .bh-title{ font-size:22px; }
+
+  .upload-head{ flex-direction:column; align-items:flex-start; }
+  .upload-badges{ justify-content:flex-start; }
+  .upload-title{ font-size:22px; }
+
+  .ready-head{ flex-direction:column; align-items:flex-start; }
+  .ready-badges{ justify-content:flex-start; }
+
+  .btn{ height:44px; }
+  .pill-x{
+    width:40px;
+    height:40px;
+    min-width:40px;
+  }
+  .file-pill--with-x{ padding-right:100px; }
+}
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce){
+  *{ transition:none !important; }
+  .beecker-spinner{ animation:none !important; }
+}
+
+/* ===== Upload orb (botón circular en el rectángulo rojo) ===== */
+
+.uploader{
+  position: relative; /* clave para poder posicionar el botón */
+}
+
+.uploader input[type="file"]{
+  padding-right: 110px; /* deja espacio para el botón a la derecha */
+}
+
+/* Botón circular */
+.upload-orb{
+  position:absolute;
+  right:18px;
+  top:50%;
+  transform:translateY(-50%);
+
+  width:72px;
+  height:72px;
+  border-radius:999px;
+  border:1px solid rgba(98,0,208,0.18);
+
+  /* Paleta Beecker */
+  background: linear-gradient(135deg, var(--b-deep), var(--b-purple), var(--b-pink));
+  box-shadow: 0 16px 30px rgba(98,0,208,0.22);
+
+  cursor:pointer;
+  overflow:hidden;
+  padding:0;
+  display:grid;
+  place-items:center;
+
+  transition: transform 160ms ease, filter 160ms ease, box-shadow 160ms ease;
+}
+
+.upload-orb:hover{
+  transform: translateY(calc(-50% - 1px));
+  filter: brightness(1.05);
+  box-shadow: 0 18px 36px rgba(98,0,208,0.26);
+}
+
+.upload-orb:active{
+  transform: translateY(-50%);
+  filter: brightness(0.98);
+}
+
+.upload-orb:focus-visible{
+  outline:3px solid var(--focus);
+  outline-offset:2px;
+}
+
+/* Nube */
+.upload-orb .cloud{
+  position: relative;
+  width:44px;
+  height:18px;
+  background: rgba(255,255,255,0.92);
+  border-radius:999px;
+  filter: drop-shadow(0 10px 14px rgba(16,24,40,0.12));
+}
+
+.upload-orb .cloud::before,
+.upload-orb .cloud::after{
+  content:"";
+  position:absolute;
+  background: rgba(255,255,255,0.92);
+  border-radius:999px;
+  top:-10px;
+}
+
+.upload-orb .cloud::before{
+  width:24px;
+  height:24px;
+  left:6px;
+}
+
+.upload-orb .cloud::after{
+  width:18px;
+  height:18px;
+  left:22px;
+  top:-7px;
+}
+
+/* Flecha (subiendo) */
+.upload-orb .arrow{
+  position:absolute;
+  left:50%;
+  top:35px;
+
+  width: 20px;
+  height: 18px;                 /* <- más corta */
+  background: rgba(255,255,255,0.92);
+  transform: translateX(-50%);
+  filter: drop-shadow(0 8px 10px rgba(16,24,40,0.12));
+
+  /* punta arriba + cuerpo abajo, pero con menos altura */
+  clip-path: polygon(
+    50% 0%,
+    100% 42%,
+    64% 42%,
+    64% 100%,
+    36% 100%,
+    36% 42%,
+    0% 42%
+  );
+
+  animation: beeckerUpload 2s linear infinite;
+}
+
+.upload-orb .arrow::after{ content:none; }
+
+@keyframes beeckerUpload{
+  0%   { transform: translateX(-50%) translateY(8px);  opacity: 1; }
+  100% { transform: translateX(-50%) translateY(-14px); opacity: 0; }
+}
+
+
+/* Reduce motion (accesibilidad) */
+@media (prefers-reduced-motion: reduce){
+  .upload-orb .arrow{ animation: none; }
+}
+
+/* Drag over state */
+.uploader.is-dragover{
+  border-color: rgba(98,0,208,0.38);
+  box-shadow: 0 18px 44px rgba(98,0,208,0.16), 0 18px 40px rgba(16,24,40,0.10);
+  transform: translateY(-1px);
+}
+
+.uploader.is-dragover .file-ui{
+  filter: brightness(1.01);
+}
+
+/* ==============================
+   Estilo para la card grande que contiene ambas cards internas
+   ============================== */
+.card.large-card {
+  width: 100%;
+  max-width: 1200px;
+  margin: 20px auto;
+  padding: 40px;
+        background:
+    radial-gradient(ellipse at right top,
+      rgba(98,0,208,0.14) 0%,
+      rgba(229,54,92,0.08) 26%,
+      rgba(255,255,255,0) 62%
+    ),
+    var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.card-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Si quieres que las cards internas tengan un pequeño margen entre ellas */
+.card > .card {
+  margin-bottom: 20px;
+}
+
+/* Opcional: Responsividad */
+@media (max-width: 768px) {
+  .card.large-card {
+    padding: 16px;
+  }
+
+  .card-inner {
+    gap: 16px;
+  }
+}
+
+.beecker-progress-bar{
+  margin-top:14px;
+  height:10px;
+  border-radius:999px;
+  background:rgba(98,0,208,0.10);
+  overflow:hidden;
+  border:1px solid rgba(98,0,208,0.14);
+}
+.beecker-progress{
+  height:100%;
+  width:0%;
+  border-radius:999px;
+  background:linear-gradient(90deg,var(--b-deep),var(--b-purple),var(--b-pink));
+  transition:width 220ms ease;
+}
+
+/* ==============================
+   SweetAlert2 — Beecker Theme
+   ============================== */
+
+/* Container / popup */
+.swal2-popup{
+  font-family: var(--font-sans) !important;
+  border-radius: var(--radius-xl) !important;
+  border: 1px solid rgba(98,0,208,0.14) !important;
+  box-shadow: 0 22px 60px rgba(16,24,40,0.18) !important;
+  padding: 18px 18px 16px !important;
+  background:
+    radial-gradient(ellipse at right top,
+      rgba(98,0,208,0.16) 0%,
+      rgba(229,54,92,0.10) 26%,
+      rgba(255,255,255,0) 62%
+    ),
+    #FFFFFF !important;
+}
+
+/* Titles/text */
+.swal2-title{
+  font-family: var(--font-display) !important;
+  color: var(--text) !important;
+  font-size: var(--text-lg) !important;
+  line-height: var(--lh-snug) !important;
+  font-weight: var(--w-bold) !important; /* Segoe-friendly */
+  margin: 0 0 6px !important;
+}
+
+.swal2-html-container{
+  color: var(--muted) !important;
+  font-size: var(--text-sm) !important;
+  line-height: 1.5 !important;
+  margin: 0 !important;
+}
+
+/* Buttons */
+.swal2-actions{
+  margin-top: 14px !important;
+  gap: 10px !important;
+}
+
+/* Primary (Confirm) */
+.swal2-confirm{
+  min-width: 180px !important;       /* makes it feel proportional */
+  height: var(--btn-h) !important;
+  border-radius: var(--btn-r) !important;
+  padding: 0 22px !important;
+  line-height: 1 !important;
+  box-shadow: 0 12px 22px rgba(98,0,208,0.18) !important;
+  background: linear-gradient(90deg,var(--b-deep),var(--b-purple),var(--b-pink)) !important;
+}
+
+.swal2-confirm:hover{
+  filter: brightness(1.07) !important;
+  transform: translateY(-1px) !important;
+  box-shadow:
+    rgba(50, 50, 93, 0.25) 0px 6px 12px -2px,
+    rgba(98, 0, 208, 0.26) 0px 12px 24px -6px !important;
+}
+
+
+/* Secondary (Cancel) */
+.swal2-cancel{
+  height: var(--btn-h) !important;
+  border-radius: var(--btn-r) !important;
+  padding: 0 var(--btn-px) !important;
+  font-weight: var(--btn-fw) !important;
+  font-size: var(--btn-fs) !important;
+
+  color: var(--b-purple) !important;
+  background: rgba(98,0,208,0.06) !important;
+  border: 1px solid rgba(98,0,208,0.18) !important;
+
+  transition: transform 160ms ease, filter 160ms ease, box-shadow 160ms ease !important;
+}
+
+.swal2-cancel:hover{
+  filter: brightness(1.02) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 14px 24px rgba(98,0,208,0.12) !important;
+}
+
+/* Icons (keep clean + brand-friendly) */
+.swal2-icon{
+  transform: scale(0.95);
+}
+.swal2-icon.swal2-error{
+  border-color: rgba(229,54,92,0.55) !important;
+}
+.swal2-icon.swal2-error [class^="swal2-x-mark-line"]{
+  background-color: var(--b-pink) !important;
+}
+
+.swal2-icon.swal2-success{
+  border-color: rgba(34,197,94,0.35) !important;
+}
+.swal2-icon.swal2-success [class^="swal2-success-line"]{
+  background-color: #22c55e !important;
+}
+.swal2-icon.swal2-success .swal2-success-ring{
+  border-color: rgba(34,197,94,0.22) !important;
+}
+
+/* Toast styling */
+.swal2-container.swal2-top-end{
+  padding-top: 16px !important;
+  padding-right: 16px !important;
+}
+
+.swal2-toast{
+  border-radius: 16px !important;
+  border: 1px solid rgba(98,0,208,0.14) !important;
+  box-shadow: 0 16px 40px rgba(16,24,40,0.14) !important;
+  background:
+    radial-gradient(ellipse at right top,
+      rgba(98,0,208,0.12) 0%,
+      rgba(229,54,92,0.08) 26%,
+      rgba(255,255,255,0) 62%
+    ),
+    #FFFFFF !important;
+}
+
+.swal2-toast .swal2-title{
+  font-size: 13px !important;
+  font-weight: var(--w-semibold) !important;
+  color: var(--text) !important;
+}
+
+.swal2-timer-progress-bar{
+  background: linear-gradient(90deg,var(--b-deep),var(--b-purple),var(--b-pink)) !important;
+}
+
+/* Focus */
+.swal2-confirm:focus,
+.swal2-cancel:focus{
+  box-shadow: 0 0 0 4px var(--focus) !important;
+}
+
+/* Si quieres un panel interno, NO card */
+.panel{
+  background: rgba(98,0,208,0.03);
+  border: 1px solid rgba(98,0,208,0.10);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  box-shadow: none;
+}
+
+.metric-detail[hidden]{
+  display:none !important;
+}
+
+.metric-detail{
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border-soft);
+
+  background:
+    radial-gradient(ellipse at right top,
+      rgba(98,0,208,0.10) 0%,
+      rgba(229,54,92,0.06) 26%,
+      rgba(255,255,255,0) 62%
+    ),
+    rgba(255,255,255,0.92);
+
+  box-shadow: 0 10px 18px rgba(16,24,40,0.06);
+}
+
+.metric-detail__title{
+  display:flex;
+  align-items:center;
+  gap: 8px;
+
+  margin: 0 0 10px 0;
+  color: var(--muted);
+
+  font-size: var(--text-xs);
+  font-weight: var(--w-bold);
+  letter-spacing: var(--ls-ui);
+  text-transform: uppercase;
+}
+
+.metric-detail__list{
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  display: grid;
+  gap: 6px;
+}
+
+.metric-detail__list li{
+  position: relative;
+  padding-left: 18px;
+
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--text);
+  opacity: 0.92;
+}
+
+.metric-detail__list li::before{
+  content: "•";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--b-purple);
+  opacity: 0.9;
+}
+
+/* Opcional: cuando el texto es largo, que “respire” */
+.metric-detail__list li + li{
+  padding-top: 2px;
+}
+
+/* Secciones del formulario */
+.form-section{
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-soft);
+background-color: transparent;
+}
+
+.section-legend{
+  padding: 0 8px;
+  font-size: var(--text-xs);
+  font-weight: var(--w-bold);
+  letter-spacing: var(--ls-ui);
+  color: var(--muted);
+}
+
+/* Label + Required */
+.label-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+
+.required-chip{
+  font-size: var(--text-xs);
+  font-weight: var(--w-bold);
+  color: var(--b-purple);
+  border: 1px solid rgba(98,0,208,0.22);
+  background: rgba(98,0,208,0.06);
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* Input con ícono */
+.input-wrap{
+  position: relative;
+}
+
+.input-with-icon .input-icon{
+  position:absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.65;
+}
+
+.input-with-icon input[type="text"]{
+  padding-left: 40px; /* espacio para el ícono */
+}
+
+/* Ajuste fino del placeholder para que no parezca "texto principal" */
+input[type="text"]::placeholder{
+  font-weight: 600;
+  opacity: 0.8;
+}
+

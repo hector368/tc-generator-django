@@ -1,0 +1,247 @@
+{% load static %}
+<!--
+Trazabilidad Técnica:
+- TCGEN-WEB-010: Plantilla principal del generador de casos de prueba.
+- TCGEN-WEB-011: Integración UI con endpoints de generación (stream) y descarga.
+- TCGEN-WEB-012: Panel de métricas y detalles de Limit reached.
+-->
+<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Beecker | Test Case Generator</title>
+
+  <link rel="icon" href="{% static 'tcgen/img/favicon.ico' %}" type="image/x-icon" />
+  <link rel="stylesheet" href="{% static 'tcgen/style.css' %}" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+</head>
+<body>
+  <noscript>
+    <div class="noscript-warning">
+      Este sitio requiere JavaScript para generar casos de prueba.
+    </div>
+  </noscript>
+
+  <header class="beecker-header">
+    <div class="bh-left">
+      <img src="{% static 'tcgen/img/b-logo.png' %}" alt="Beecker" />
+    </div>
+
+    <div class="bh-center">
+      <div class="bh-title">Automated Test Case Generator</div>
+    </div>
+
+    <div class="bh-right">
+      <img src="{% static 'tcgen/img/logo.png' %}" alt="Logo" />
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="page-inner">
+
+      <section class="card large-card">
+        <div class="card-inner">
+
+          <section aria-labelledby="uploadTitle">
+            <div class="upload-head">
+              <div>
+                <h1 id="uploadTitle" class="upload-title">Upload your PDD document</h1>
+                <p class="upload-sub">Upload your document to automatically generate Azure DevOps–ready test cases.</p>
+              </div>
+
+              <div class="upload-badges" aria-label="Formats and limits">
+                <div class="badge-mini" title="Supported formats">
+                  📄 <span>PDF / DOCX</span>
+                </div>
+                <div class="badge-mini" title="Recommended max size">
+                  📦 <span>Up to 25MB</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="hr" aria-hidden="true"></div>
+
+            <form id="genForm"
+                  method="post"
+                  enctype="multipart/form-data"
+                  data-generate-stream-url="{% url 'tcgen_generate_stream' %}"
+                  data-download-url="{% url 'tcgen_download' %}">
+              {% csrf_token %}
+
+              <fieldset class="form-section" aria-labelledby="docLegend">
+                <legend id="docLegend" class="section-legend">Document</legend>
+
+                <div class="field">
+                  <div class="label-row">
+                    <label class="label" for="id_document">Upload your PDD document</label>
+                    <span class="required-chip" aria-hidden="true">Required</span>
+                  </div>
+
+                  <div class="uploader">
+                    <input id="id_document"
+                           name="document"
+                           type="file"
+                           class="native-file"
+                           accept=".pdf,.docx" />
+
+                    <button type="button" class="file-ui" id="fileUiBtn">
+                      <span class="file-ui__btn">Browse…</span>
+                      <span class="file-ui__text" id="fileHint">No file selected</span>
+                    </button>
+
+                    <button type="button" class="btn upload upload-orb" id="uploadOrb" aria-label="Select file">
+                      <span class="cloud" aria-hidden="true"></span>
+                      <span class="arrow" aria-hidden="true"></span>
+                    </button>
+                  </div>
+
+                  <div id="filePill" class="file-pill file-pill--with-x" style="display:none;">
+                    <div class="meta">
+                      <div class="name" id="fileName">✔️ File selected</div>
+                      <div class="size" id="fileSize">Size: -</div>
+                    </div>
+                    <button type="button" class="pill-x" id="clearFileBtn" aria-label="Remove file">✕</button>
+                  </div>
+                </div>
+              </fieldset>
+
+              <fieldset class="form-section" aria-labelledby="adoLegend">
+                <legend id="adoLegend" class="section-legend">Assigned To</legend>
+
+                <div class="field">
+                  <div class="label-row">
+                    <label class="label" for="id_assigned_to">Assign test cases to (Azure DevOps)</label>
+                    <span class="required-chip" aria-hidden="true">Required</span>
+                  </div>
+
+                  <div class="input-wrap input-with-icon">
+                    <span class="input-icon" aria-hidden="true">👤</span>
+                    <input
+                      id="id_assigned_to"
+                      name="assigned_to"
+                      type="text"
+                      class="text-input"
+                      placeholder="Exact display name in Azure DevOps."
+                      autocomplete="off"
+                      spellcheck="false"
+                      aria-describedby="assignedHelp"
+                    />
+                  </div>
+                </div>
+              </fieldset>
+
+              <div class="cta-wrap" aria-hidden="true"></div>
+              <div class="cta-row">
+                <div class="cta-spacer"></div>
+                <button class="btn btn-primary" type="submit" id="submitBtn">
+                  Generate test cases
+                </button>
+                <div class="cta-spacer"></div>
+              </div>
+            </form>
+          </section>
+
+          <!-- Inicia oculto para evitar flash; el JS lo muestra cuando corresponde. -->
+          <section id="readyCard" style="display:none;">
+            <div class="ready-head">
+              <div>
+                <h2 id="readyTitle" class="ready-title">Test cases generated successfully ☑️</h2>
+                <p class="ready-sub">Click below to download the generated file.</p>
+              </div>
+
+              <div class="ready-badges">
+                <div class="badge-mini">
+                  📄 File name: <span id="readyFilename">TC.csv</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="hr" aria-hidden="true"></div>
+
+            <div class="metrics">
+              <div class="metric">
+                <div class="metric-label">Area Path</div>
+                <div id="mArea" class="metric-value">-</div>
+              </div>
+
+              <div class="metric">
+                <div class="metric-label">Requirements</div>
+                <div id="mReq" class="metric-value">0</div>
+              </div>
+
+              <div class="metric">
+                <div class="metric-label">Test Cases created</div>
+                <div id="mTc" class="metric-value">0</div>
+              </div>
+
+              <div class="metric">
+                <div class="metric-label">Not testable requirements</div>
+                <div id="mNot" class="metric-value">0</div>
+              </div>
+
+              <div class="metric">
+                <div class="metric-label">Limit reached requirements</div>
+                <div id="mLimit" class="metric-value">0</div>
+              </div>
+
+              <div class="metric">
+                <div class="metric-label">Input tokens</div>
+                <div id="mInput" class="metric-value">0</div>
+              </div>
+
+              <div class="metric">
+                <div class="metric-label">Output tokens</div>
+                <div id="mOutput" class="metric-value">0</div>
+              </div>
+
+              <div class="metric">
+                <div class="metric-label">Time (s)</div>
+                <div id="mTime" class="metric-value">0</div>
+              </div>
+            </div>
+
+            <div id="limitDetail" class="metric-detail" hidden aria-live="polite">
+              <div class="metric-detail__title">Limit reached details</div>
+              <ul id="limitDetailList" class="metric-detail__list"></ul>
+            </div>
+
+            <div class="hr" aria-hidden="true"></div>
+
+            <div class="cta-row">
+              <div class="cta-spacer"></div>
+              <button class="btn btn-secondary" type="button" id="downloadBtn">
+                Download TC's
+              </button>
+              <div class="cta-spacer"></div>
+            </div>
+          </section>
+
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <div class="beecker-overlay" id="overlay" aria-hidden="true">
+    <div class="beecker-overlay-card" role="status" aria-live="polite" aria-atomic="true">
+      <div class="beecker-loader-row">
+        <div class="beecker-spinner" aria-hidden="true"></div>
+        <div>
+          <div class="beecker-loader-title">Generating test cases</div>
+          <div class="beecker-loader-sub" id="progressText">Please do not close this window. This process may take a few minutes.</div>
+        </div>
+      </div>
+
+      <div class="beecker-progress-bar">
+        <div class="beecker-progress" id="progressBar"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="{% static 'vendor/sweetalert2/sweetalert2.all.min.js' %}" defer></script>
+  <script src="{% static 'tcgen/tc_generator.js' %}" defer></script>
+</body>
+</html>
