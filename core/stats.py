@@ -1,31 +1,34 @@
 """
-Modulo de calculo de metricas a partir del CSV final de ADO.
+Módulo de cálculo de métricas a partir del CSV final de ADO.
 
-Este modulo analiza el CSV generado para extraer metricas sobre
-requerimientos, test cases, y otros indicadores de calidad.
+Este módulo analiza el CSV generado para extraer métricas sobre
+requerimientos, test cases y otros indicadores de calidad.
 
 Responsabilidades:
 - Contar requerimientos detectados en el CSV
 - Contar test cases generados exitosamente
 - Identificar requerimientos no testeables
-- Detectar requerimientos con limite alcanzado
-- Extraer detalles de objetivos omitidos
+- Detectar requerimientos con límite alcanzado (Limit reached)
+- Extraer detalles de objetivos omitidos (lista de bullets)
 
-Nota: No modifica el CSV, solo lo analiza para metricas de UI.
+Nota: No modifica el CSV, solo lo analiza para métricas de UI.
 """
+
 from __future__ import annotations
 
 import csv
 import io
 import re
+from typing import Any
 
-# Patrones de expresiones regulares
+# -----------------------------
+# Patrones y constantes
+# -----------------------------
+
 REQ_TC_RE = re.compile(r"^\d{3}$")
-
-# Constantes de estructura ADO
 ADO_NCOLS = 15
 
-# Indices de columnas (ADO)
+# Índices de columnas (ADO)
 IDX_WORK_ITEM = 1
 IDX_TITLE = 2
 IDX_TEST_STEP = 3
@@ -44,12 +47,43 @@ LIMIT_REACHED_LEGACY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Objetivos: compatibilidad con estilo viejo ("Que el bot ...")
+# y nuevo (verbo en infinitivo: Validar/Verificar/Registrar/Manejar..., etc.)
+# También permite opcional "No ..." al inicio.
+_OBJETIVE_START_RE = re.compile(
+    r"^\s*(?:no\s+)?(?:que el bot\b|[a-záéíóúñü]+(?:ar|er|ir)\b)",
+    re.IGNORECASE,
+)
 
-def _count_bullets(obj: str) -> list[str]:
+
+def _looks_like_objetive(text: str) -> bool:
     """
-    Extrae bullets en una sola celda.
+    Heurística para detectar si un texto "parece" un objetivo:
 
-    Regla: cada objetivo inicia con bullet (o caracter similar).
+    - Formato anterior: inicia con "Que el bot ..."
+    - Formato nuevo: inicia con verbo en infinitivo (termina en ar/er/ir)
+    - Permite "No ..." como negación al inicio
+
+    Args:
+        text: texto a evaluar
+
+    Returns:
+        True si parece objetivo, False si no.
+    """
+    s = (text or "").strip()
+    if not s:
+        return False
+    return bool(_OBJETIVE_START_RE.match(s))
+
+
+def _extract_bullets(obj: str) -> list[str]:
+    """
+    Extrae items tipo bullet en una sola celda.
+
+    Regla:
+    - Los objetivos omitidos en Limit reached vienen como lista en Objetive
+      con "•" (o caracteres similares).
+    - Devuelve items limpios, sin el marcador.
 
     Args:
         obj: Texto con bullets a extraer
@@ -61,48 +95,50 @@ def _count_bullets(obj: str) -> list[str]:
     s = s.replace("\r", " ").replace("\n", " ").strip()
     if not s:
         return []
-    parts = [x.strip() for x in re.split(r"\s*•\s*", s) if x.strip()]
-    return parts
+    s = s.replace("·", "•").replace("◦", "•")
+    return [x.strip() for x in re.split(r"\s*•\s*", s) if x.strip()]
 
 
 def _tc_num_from_title(title: str) -> int | None:
     """
-    Extrae el numero de TC (ultimo bloque XXX) desde Title.
+    Extrae el número de TC (último bloque XXX) desde Title.
 
     Args:
-        title: Titulo del test case (formato: PROJECT.REQ.TC)
+        title: Título del test case (formato: PROJECT.REQ.TC)
 
     Returns:
-        Numero de TC o None si no se puede extraer
+        Número de TC o None si no se puede extraer.
     """
     if not title:
         return None
     parts = [p.strip() for p in title.split(".") if p.strip()]
     if not parts:
         return None
+
     last = parts[-1]
     if not REQ_TC_RE.match(last):
         return None
+
     try:
         return int(last)
     except ValueError:
         return None
 
 
-def _is_limit_row(row: list[str]) -> tuple[bool, dict]:
+def _is_limit_row(row: list[str]) -> tuple[bool, dict[str, Any]]:
     """
     Detecta si la fila es la fila final de Limit reached.
 
-    Nuevo formato (actual backend):
-    - Test Step vacio (metadata)
+    Nuevo formato (backend actual):
+    - Test Step vacío (fila metadata)
     - Expected result == "(Limit reached)"
     - Objetive contiene lista con bullets
 
     Legado:
-    - Step action inicia con "(Limit reached): Generated X of Y ..."
+    - Step action inicia con "(Limit reached): Generated X of Y identified ..."
 
     Args:
-        row: Fila CSV a evaluar
+        row: fila CSV a evaluar
 
     Returns:
         Tupla (es_limit_row, diccionario_con_detalles)
@@ -115,19 +151,21 @@ def _is_limit_row(row: list[str]) -> tuple[bool, dict]:
 
     tc_num = _tc_num_from_title(title)
 
-    # Nuevo formato: marca EXACTA en Expected result
-    # (fila metadata => Test Step vacio)
+    # 1) Nuevo formato: marca EXACTA en Expected result y metadata (Test Step vacío)
     if test_step == "" and expected_result == LIMIT_REACHED_MARK:
-        bullets = _count_bullets(obj)
-        bullets = [b for b in bullets if b.lower().startswith("que el bot")]
+        bullets_all = _extract_bullets(obj)
+        bullets = [b for b in bullets_all if _looks_like_objetive(b)]
+        # Si no detecta objetivos por heurística, usa lo que haya (evita perder info)
+        used = bullets if bullets else bullets_all
+
         return True, {
             "generated_tcs": None,
             "identified_tcs": None,
-            "omitted_tcs": len(bullets),
-            "omitted_objectives": bullets[:50],
+            "omitted_tcs": len(used),
+            "omitted_objectives": used[:50],
         }
 
-    # Legado: "(Limit reached): Generated X of Y identified ..."
+    # 2) Legado
     if step_action.startswith(LIMIT_REACHED_LEGACY_PREFIX):
         m = LIMIT_REACHED_LEGACY_RE.search(step_action)
         if m:
@@ -138,6 +176,7 @@ def _is_limit_row(row: list[str]) -> tuple[bool, dict]:
             generated = None
             identified = None
             omitted = None
+
         return True, {
             "generated_tcs": generated,
             "identified_tcs": identified,
@@ -145,15 +184,14 @@ def _is_limit_row(row: list[str]) -> tuple[bool, dict]:
             "omitted_objectives": None,
         }
 
-    # Fallback (si el modelo olvida poner "(Limit reached)" en
-    # Expected result)
+    # 3) Fallback: si el modelo olvida "(Limit reached)" pero deja lista en Objetive
     # Solo si:
-    # - fila metadata (Test Step vacio)
+    # - metadata (Test Step vacío)
     # - TC >= 11
-    # - Objetive tiene >=2 bullets "Que el bot ..."
+    # - Objetive tiene >=2 bullets que parezcan objetivos
     if test_step == "" and (tc_num is not None and tc_num >= 11):
-        bullets = _count_bullets(obj)
-        bullets = [b for b in bullets if b.lower().startswith("que el bot")]
+        bullets_all = _extract_bullets(obj)
+        bullets = [b for b in bullets_all if _looks_like_objetive(b)]
         if len(bullets) >= 2:
             return True, {
                 "generated_tcs": None,
@@ -165,22 +203,22 @@ def _is_limit_row(row: list[str]) -> tuple[bool, dict]:
     return False, {}
 
 
-def compute_csv_stats(csv_text: str) -> dict:
+def compute_csv_stats(csv_text: str) -> dict[str, Any]:
     """
-    Calcula metricas completas del CSV de test cases.
+    Calcula métricas completas del CSV de test cases.
 
     Args:
-        csv_text: Contenido completo del CSV
+        csv_text: contenido completo del CSV
 
     Returns:
-        Diccionario con metricas:
-        - requirements_total: Total de requerimientos detectados
-        - test_cases_total: Total de TCs generados
-        - requirements_not_testable: Cantidad no testeables
-        - requirements_not_testable_list: Lista de reqs no testeables
-        - requirements_limit_reached_total: Cantidad con limite
-        - requirements_limit_reached_list: Lista de reqs con limite
-        - requirements_limit_reached_detail: Detalles de limites
+        Diccionario con métricas:
+        - requirements_total
+        - test_cases_total
+        - requirements_not_testable
+        - requirements_not_testable_list
+        - requirements_limit_reached_total
+        - requirements_limit_reached_list
+        - requirements_limit_reached_detail
     """
     txt = (csv_text or "").lstrip("\ufeff").strip()
     if not txt:
@@ -199,7 +237,7 @@ def compute_csv_stats(csv_text: str) -> dict:
     requirements: set[str] = set()
     not_testable: set[str] = set()
     limit_reached: set[str] = set()
-    limit_detail_by_req: dict[str, dict] = {}
+    limit_detail_by_req: dict[str, dict[str, Any]] = {}
 
     test_cases_total = 0
     current_req: str | None = None
@@ -208,7 +246,7 @@ def compute_csv_stats(csv_text: str) -> dict:
         if not row:
             continue
 
-        # Detecta header
+        # Detecta header estándar ADO
         is_header = (
             len(row) >= 2
             and row[0].strip() == "ID"
@@ -217,7 +255,7 @@ def compute_csv_stats(csv_text: str) -> dict:
         if is_header:
             continue
 
-        # Normaliza a 15 columnas sin romper metricas
+        # Normaliza a 15 columnas
         if len(row) < ADO_NCOLS:
             row = row + [""] * (ADO_NCOLS - len(row))
         elif len(row) > ADO_NCOLS:
@@ -227,7 +265,7 @@ def compute_csv_stats(csv_text: str) -> dict:
         title = (row[IDX_TITLE] or "").strip()
         expected_result = (row[IDX_EXPECTED_RESULT] or "").strip()
 
-        # Detecta requirement desde Title
+        # Detecta requirement desde Title (PROJECT.REQ.TC)
         if title:
             parts = [p.strip() for p in title.split(".") if p.strip()]
             has_req_and_tc = (
@@ -253,17 +291,13 @@ def compute_csv_stats(csv_text: str) -> dict:
                 "omitted_objectives": info.get("omitted_objectives"),
             }
 
-        # Cuenta TCs (solo filas metadata de TC; EXCLUYE limit row
-        # para "TCs created")
+        # Cuenta TCs (solo filas metadata de TC; excluye limit row)
         if work_item_type.lower() == "test case":
             if not is_limit:
                 test_cases_total += 1
 
-            # Not testable (en metadata row tipicamente)
-            is_not_testable = expected_result.startswith(
-                NO_TESTEABLE_PREFIX
-            )
-            if current_req and is_not_testable:
+            # Not testable (en metadata row típicamente)
+            if current_req and expected_result.startswith(NO_TESTEABLE_PREFIX):
                 not_testable.add(current_req)
 
     not_testable_list = sorted(not_testable, key=lambda x: int(x))

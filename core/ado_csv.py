@@ -55,10 +55,38 @@ LIMIT_REACHED_MARKERS: Final[tuple[str, ...]] = (
 BULLET_SEP: Final[str] = " • "
 
 # Valores permitidos/esperados (defensivo ante salidas del LLM)
+# Incluye variaciones comunes para soportar corrimientos (Functional/Funcional/Funtional).
 TYPE_TEST_ALIASES: Final[frozenset[str]] = frozenset(
-    {"functional", "no functional"}
+    {
+        "functional",
+        "funtional",   # typo común
+        "funcional",   # español
+        "no functional",
+        "no funcional",
+        "non functional",
+        "non-functional",
+        "nonfunctional",
+    }
 )
 PRIORITY_ALLOWED: Final[frozenset[str]] = frozenset({"1", "2", "3"})
+
+# Objetive: compatibilidad con estilo viejo ("Que el bot ...") y nuevo (infinitivo).
+_OBJETIVE_START_RE: Final[re.Pattern[str]] = re.compile(
+    r"^\s*(?:no\s+)?(?:que el bot\b|[a-záéíóúñü]+(?:ar|er|ir)\b)",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_objetive(text: str) -> bool:
+    """
+    Heurística para detectar si un texto parece un Objetive:
+    - "Que el bot ..." (legado)
+    - Verbo en infinitivo (Validar/Verificar/Registrar/Manejar/Notificar..., etc.)
+    """
+    s = (text or "").strip()
+    if not s:
+        return False
+    return bool(_OBJETIVE_START_RE.match(s))
 
 
 def _one_line_with_bullets(text: str) -> str:
@@ -167,15 +195,6 @@ def _ensure_ncols(row: list[str]) -> list[str]:
     - Si trae columnas extra vacias (trailing comma), recorta
     - Si trae menos columnas, rellena con strings vacios
     - Si trae columnas extra con contenido, levanta ValueError
-
-    Args:
-        row: Lista de valores de una fila CSV
-
-    Returns:
-        Lista normalizada con exactamente ADO_NCOLS elementos
-
-    Raises:
-        ValueError: Si la fila tiene columnas extra con contenido
     """
     cleaned = [(cell or "").strip() for cell in row]
 
@@ -201,12 +220,6 @@ def parse_ado_rows(csv_text: str) -> list[list[str]]:
     Parsea texto CSV a filas ADO (sin encabezado).
 
     Omite filas vacias y omite la fila de encabezado si viene incluida.
-
-    Args:
-        csv_text: Texto en formato CSV
-
-    Returns:
-        Lista de filas parseadas y normalizadas
     """
     txt = (csv_text or "").lstrip(BOM).strip()
     if not txt:
@@ -234,15 +247,6 @@ def dump_ado_rows(rows: list[list[str]]) -> str:
     Reescribe CSV con comillas correctas para evitar comas accidentales.
 
     Retorna el CSV sin encabezado y sin lineas finales extra.
-
-    Args:
-        rows: Lista de filas a serializar
-
-    Returns:
-        Texto CSV formateado
-
-    Raises:
-        ValueError: Si alguna fila no tiene el numero correcto de columnas
     """
     buf = io.StringIO()
     writer = csv.writer(
@@ -272,12 +276,6 @@ def is_tc_start(row: list[str]) -> bool:
     - Inicia si existe un 'Title' no vacio Y no es una fila de paso
       (Test Step vacio). Esto evita que pasos mal formateados se
       interpreten como un nuevo Test Case.
-
-    Args:
-        row: Fila CSV a evaluar
-
-    Returns:
-        True si es inicio de Test Case, False en caso contrario
     """
     work_item = (row[1] or "").strip().lower()
     title = (row[2] or "").strip()
@@ -288,12 +286,6 @@ def is_tc_start(row: list[str]) -> bool:
 def _sanitize_preconditions(text: str) -> str:
     """
     Sanitiza precondiciones para evitar saltos de linea que rompan el CSV.
-
-    Args:
-        text: Texto de precondiciones
-
-    Returns:
-        Texto en una sola linea con bullets como separadores
     """
     s = (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
     if not s:
@@ -315,26 +307,6 @@ def enforce_structure_and_titles(
 ) -> tuple[list[list[str]], int]:
     """
     Normaliza filas a una estructura ADO consistente.
-
-    Reglas aplicadas:
-    - Fila metadata del TC: sin Test Step/Step action/Step Expected
-    - EXCEPCION: fila final Limit reached tiene Expected result especial
-    - Filas siguientes: pasos 1..N (solo Step action/expected)
-    - Fuerza State/Area Path/Assigned To en metadata
-    - Sanitiza Preconditions para que no rompa el CSV
-    - Repara corrimientos comunes de columnas en metadata (salidas del LLM)
-
-    Args:
-        rows: Filas parseadas a normalizar
-        project_id: ID del proyecto
-        requirement_number: Numero de requerimiento
-        tc_start: Indice inicial de numeracion de TCs
-        state: Estado del Test Case (por defecto "Design")
-        area_path: Ruta de area en ADO
-        assigned_to: Usuario asignado
-
-    Returns:
-        Tupla con (filas_normalizadas, cantidad_de_test_cases)
     """
     # Indices de columnas ADO
     IDX_ID = 0
@@ -355,19 +327,22 @@ def enforce_structure_and_titles(
 
     def _count_omitted_objectives(obj_text: str) -> int:
         """
-        Heuristica: el Limit row nuevo trae una lista en Objetive con
-        bullets. Si hay >=2 bullets y al menos uno inicia con "Que el bot",
-        lo tratamos como Limit row.
+        Heurística: el Limit row nuevo trae una lista en Objetive con bullets.
+        Si hay >=2 bullets y al menos uno parece un objetivo (infinitivo o "Que el bot"),
+        lo tratamos como "limit-like".
         """
         s = (obj_text or "").strip()
         if not s:
             return 0
+
         s = s.replace("·", "•").replace("◦", "•")
         items = [x.strip() for x in re.split(r"\s*•\s*", s) if x.strip()]
         if len(items) < 2:
             return 0
-        if not any(x.lower().startswith("que el bot") for x in items):
+
+        if not any(_looks_like_objetive(x) for x in items):
             return 0
+
         return len(items)
 
     out: list[list[str]] = []
@@ -385,8 +360,7 @@ def enforce_structure_and_titles(
     for row in rows:
         row = _ensure_ncols(row)
 
-        # Si ya emitimos la fila final "Limit reached", ignoramos todo
-        # lo que venga despues.
+        # Si ya emitimos la fila final "Limit reached", ignoramos todo lo que venga despues.
         if limit_emitted:
             continue
 
@@ -400,18 +374,15 @@ def enforce_structure_and_titles(
             first_step_expected = (row[IDX_STEP_EXPECTED] or "").strip()
             expected_result = (row[IDX_EXPECTED_RESULT] or "").strip()
 
-            # Detecta limit row por marcador explicito.
+            # Detecta limit row por marcador explícito.
             is_limit_marker = any(
-                first_step_action.startswith(m)
-                for m in LIMIT_REACHED_MARKERS
+                first_step_action.startswith(m) for m in LIMIT_REACHED_MARKERS
             ) or any(
-                expected_result.startswith(m)
-                for m in LIMIT_REACHED_MARKERS
+                expected_result.startswith(m) for m in LIMIT_REACHED_MARKERS
             )
 
             omitted_count = _count_omitted_objectives(row[IDX_OBJETIVE])
             is_limit_like = tc_idx >= 11 and omitted_count > 0
-
             is_limit_row = is_limit_marker or is_limit_like
 
             # Metadata base
@@ -425,9 +396,9 @@ def enforce_structure_and_titles(
             preconditions_text = row[IDX_PRECONDITIONS]
             row[IDX_PRECONDITIONS] = _sanitize_preconditions(preconditions_text)
 
-            # Reparacion defensiva: corrimiento de columnas en metadata.
+            # Reparación defensiva: corrimiento de columnas en metadata.
             #
-            # Caso observado: el LLM duplica "Functional" en Priority y desplaza:
+            # Caso observado: el LLM duplica "Functional/Funcional" en Priority y desplaza:
             # Priority(1/2/3) -> Expected result -> Objetive -> Operating Scenario
             prio_raw = (row[IDX_PRIORITY] or "").strip().lower()
             expected_maybe_priority = (row[IDX_EXPECTED_RESULT] or "").strip()
@@ -439,7 +410,7 @@ def enforce_structure_and_titles(
                 prio_raw in TYPE_TEST_ALIASES
                 and expected_maybe_priority in PRIORITY_ALLOWED
                 and bool(objetive_maybe_expected)
-                and scenario_maybe_objetive.lower().startswith("que el bot")
+                and _looks_like_objetive(scenario_maybe_objetive)
             )
 
             if is_shift_pattern:
@@ -449,11 +420,11 @@ def enforce_structure_and_titles(
                 row[IDX_OPER_SCENARIO] = precond_maybe_scenario
                 row[IDX_PRECONDITIONS] = ""
 
-            # Default tipo de prueba si viene vacio
+            # Default tipo de prueba si viene vacío
             if not (row[IDX_TYPE_TEST] or "").strip():
                 row[IDX_TYPE_TEST] = "Functional"
 
-            # En metadata, Priority debe ser numerico.
+            # En metadata, Priority debe ser numérico.
             prio_final = (row[IDX_PRIORITY] or "").strip()
             if prio_final and prio_final not in PRIORITY_ALLOWED:
                 row[IDX_PRIORITY] = "1"
@@ -471,7 +442,7 @@ def enforce_structure_and_titles(
                 row[IDX_STEP_ACTION] = ""
                 row[IDX_STEP_EXPECTED] = ""
 
-                # Marca ahora en Expected result (columna correcta).
+                # Marca en Expected result (columna correcta).
                 row[IDX_EXPECTED_RESULT] = LIMIT_REACHED_MARK
 
                 # La lista va en Objetive, una sola linea con bullets.
@@ -490,16 +461,14 @@ def enforce_structure_and_titles(
             row[IDX_STEP_EXPECTED] = ""
             out.append(row)
 
-            # Si el modelo metio Step action en metadata, lo movemos a Step 1.
+            # Si el modelo metió Step action en metadata, lo movemos a Step 1.
             if first_step_action:
                 step_idx = 1
                 step_row = [""] * ADO_NCOLS
                 step_row[IDX_TEST_STEP] = "1"
-                action_text = _one_line_with_bullets(first_step_action)
-                step_row[IDX_STEP_ACTION] = action_text
+                step_row[IDX_STEP_ACTION] = _one_line_with_bullets(first_step_action)
                 if first_step_expected:
-                    expected_text = _one_line_with_bullets(first_step_expected)
-                    step_row[IDX_STEP_EXPECTED] = expected_text
+                    step_row[IDX_STEP_EXPECTED] = _one_line_with_bullets(first_step_expected)
                 out.append(step_row)
 
             continue
@@ -519,8 +488,7 @@ def enforce_structure_and_titles(
         step_row[IDX_TEST_STEP] = str(step_idx)
         step_row[IDX_STEP_ACTION] = _one_line_with_bullets(step_action)
         if step_expected:
-            expected_text = _one_line_with_bullets(step_expected)
-            step_row[IDX_STEP_EXPECTED] = expected_text
+            step_row[IDX_STEP_EXPECTED] = _one_line_with_bullets(step_expected)
 
         out.append(step_row)
 
