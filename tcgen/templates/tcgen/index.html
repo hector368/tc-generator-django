@@ -57,7 +57,7 @@ Trazabilidad Técnica:
                   📄 <span>PDF / DOCX</span>
                 </div>
                 <div class="badge-mini" title="Recommended max size">
-                  📦 <span>Up to 25MB</span>
+                  📦 <span>Up to 100MB</span>
                 </div>
               </div>
             </div>
@@ -68,7 +68,8 @@ Trazabilidad Técnica:
                   method="post"
                   enctype="multipart/form-data"
                   data-generate-stream-url="{% url 'tcgen_generate_stream' %}"
-                  data-download-url="{% url 'tcgen_download' %}">
+                  data-download-url="{% url 'tcgen_download' %}"
+                  data-analyze-url="{% url 'tcgen_analyze' %}">
               {% csrf_token %}
 
               <fieldset class="form-section" aria-labelledby="docLegend">
@@ -104,6 +105,22 @@ Trazabilidad Técnica:
                       <div class="size" id="fileSize">Size: -</div>
                     </div>
                     <button type="button" class="pill-x" id="clearFileBtn" aria-label="Remove file">✕</button>
+                  </div>
+                  <div id="reqPreview" class="metric-detail" hidden aria-live="polite">
+                    <div class="req-summary__row">
+                      <div class="req-summary__left">
+                        <div class="metric-detail__title">Requerimientos detectados</div>
+                      
+                        <div class="req-summary__badges">
+                          <span class="badge-mini">🧩 ID: <span id="reqPid">—</span></span>
+                          <span class="badge-mini">📌 Total: <span id="reqCount">0</span></span>
+                        </div>
+                      </div>
+                    
+                      <button type="button" class="btn btn-secondary" id="reqPreviewBtn" disabled>
+                        Ver lista completa
+                      </button>
+                    </div>
                   </div>
                 </div>
               </fieldset>

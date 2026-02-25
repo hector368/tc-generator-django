@@ -30,11 +30,8 @@ from core.claude_client import call_claude, get_client
 from core.context_pack import build_context_pack
 from core.extractor import extract_text_from_upload
 from core.generator import extract_csv_only
-from core.requirements_splitter import (
-    extract_project_id,
-    slice_to_be_section,
-    split_by_requirement,
-)
+from core.requirements_splitter import extract_project_id
+from core.requirements_segmenter import segment_requirements_flexible
 from core.stats import compute_csv_stats
 
 logger = logging.getLogger(__name__)
@@ -62,7 +59,9 @@ MSG_NO_PROJECT_ID: Final[str] = (
 MSG_NO_TOBE: Final[str] = (
     "No fue posible extraer la sección TO-BE (2.4) del documento."
 )
-MSG_NO_REQS: Final[str] = "No se detectaron requerimientos en la sección TO-BE."
+MSG_NO_REQS: Final[str] = (
+    "No fue posible segmentar requerimientos (TO-BE / FDD / Process Steps)."
+)
 MSG_OK_GENERATED: Final[str] = "Casos de prueba generados correctamente."
 MSG_ENGINE_ERROR: Final[str] = (
     "Ocurrió un error durante la generación. Revise los logs del servidor."
@@ -239,25 +238,26 @@ def iter_generation_events(
 
         doc_text = extract_text_from_upload(filename, file_bytes)
 
-        project_id = extract_project_id(doc_text)
+        project_id = extract_project_id(doc_text, filename=filename)
         if not project_id:
             yield _error_event(ERR_NO_PROJECT_ID, MSG_NO_PROJECT_ID)
             return
 
-        doc_text_to_be = slice_to_be_section(doc_text)
-        if not doc_text_to_be.strip():
-            yield _error_event(ERR_NO_TOBE, MSG_NO_TOBE)
-            return
+        seg = segment_requirements_flexible(doc_text, project_id=project_id)
 
-        context_pack = build_context_pack(doc_text_to_be)
-
-        blocks = split_by_requirement(doc_text_to_be)
+        blocks = seg.blocks
         if not blocks:
             yield _error_event(ERR_NO_REQS, MSG_NO_REQS)
             return
 
+        context_pack = build_context_pack(seg.context_text)
+
         total = len(blocks)
-        yield {"type": EVENT_META, "total_blocks": total}
+        yield {
+            "type": EVENT_META,
+            "total_blocks": total,
+            "segmentation_method": seg.method,
+        }
 
         for idx, block in enumerate(blocks, start=1):
             t0 = time.perf_counter()

@@ -18,7 +18,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Final
-
+from pathlib import Path
+from collections import Counter
 
 @dataclass(frozen=True)
 class RequirementBlock:
@@ -513,11 +514,15 @@ _PROJECT_ID_TOKEN_RE = re.compile(
     rf"(?i)(?P<id>[A-Z]{{2,10}}(?:\.{_ID_SEGMENT_RE}){{1,8}})(?=$|[^.])"
 )
 
-# Etiquetas (se prioriza 'ID del proyecto')
-_PROJECT_ID_LABELS = [
-    # (regex, prioridad) -> menor prioridad = mejor
+# Etiquetas (se prioriza 'ID del proyecto', luego variantes ES/EN)
+_PROJECT_ID_LABELS: list[tuple[re.Pattern[str], int]] = [
     (re.compile(r"(?i)\bID\s+del\s+proyecto\b"), 0),
     (re.compile(r"(?i)\bID\s+proyecto\b"), 1),
+    (re.compile(r"(?i)\bIdProyecto\b"), 1),
+    (re.compile(r"(?i)\bCódigo\s+del\s+proyecto\b"), 2),
+    (re.compile(r"(?i)\bClave\s+del\s+proyecto\b"), 3),
+    (re.compile(r"(?i)\bProject\s+ID\b"), 2),
+    (re.compile(r"(?i)\bProject\s+Code\b"), 3),
 ]
 
 _PROJECT_ID_LOOKAHEAD_CHARS = 600
@@ -572,21 +577,37 @@ def _score_project_id(
     score = segments * 100 + length - (label_priority * 10)
     return (score, position, length)
 
-
-def extract_project_id(text: str) -> str | None:
+def _extract_project_id_from_filename(filename: str) -> str | None:
     """
-    Extrae el IdProyecto completo desde el documento.
+    Fallback: extrae el IdProyecto desde el nombre del archivo.
 
-    Si existen multiples IDs, elige el mas probable:
-    - Prioriza 'ID del proyecto' sobre 'ID proyecto'
-    - Prioriza IDs mas especificos (mas segmentos/mas largo)
-    - En empate, toma el que aparece mas adelante (cuerpo > portada)
+    Ejemplos:
+    - "[Public] NSC.C.007_PDD.pdf" -> "NSC.C.007"
+    - "[Público] MCC.021_FDD.pdf"  -> "MCC.021"
+    """
+    if not filename:
+        return None
 
-    Args:
-        text: Texto completo del documento
+    name = Path(filename).name
+    # Remueve prefijo tipo "[Public]" / "[Público]"
+    name = re.sub(r"^\[[^\]]+\]\s*", "", name).strip()
 
-    Returns:
-        ID del proyecto o None si no se encuentra
+    stem = Path(name).stem  # sin extensión
+    # Normaliza separadores típicos
+    normalized = re.sub(r"[_\-\s]+", " ", stem).strip()
+
+    m = _PROJECT_ID_TOKEN_RE.search(normalized)
+    if not m:
+        return None
+
+    candidate = m.group("id").upper().strip()
+    return candidate if _is_valid_project_id(candidate) else None
+
+
+def _extract_project_id_anywhere(text: str) -> str | None:
+    """
+    Fallback final: busca un token tipo IdProyecto en cualquier parte del texto.
+    (se usa solo si no hubo etiquetas ni filename)
     """
     t = (text or "").replace("\r\n", "\n").replace("\r", "\n")
     if not t.strip():
@@ -595,11 +616,47 @@ def extract_project_id(text: str) -> str | None:
     best_id: str | None = None
     best_score: tuple[int, int, int] | None = None
 
+    for m in _PROJECT_ID_TOKEN_RE.finditer(t):
+        candidate = m.group("id").upper().strip()
+        if not _is_valid_project_id(candidate):
+            continue
+
+        score = _score_project_id(candidate, label_priority=9, position=m.start())
+        if best_score is None or score > best_score:
+            best_score = score
+            best_id = candidate
+
+    return best_id
+
+def extract_project_id(text: str, filename: str | None = None) -> str | None:
+    """
+    Extrae el IdProyecto completo desde el documento.
+
+    Estrategia (de más confiable a menos):
+    1) Buscar por etiquetas (ID del proyecto / Project ID / etc.)
+    2) Fallback por nombre de archivo (cuando viene en el naming)
+    3) Fallback por encabezados tipo "MCC.021.001" (prefijo más frecuente)
+    4) Fallback por búsqueda global en el texto (último recurso)
+
+    Args:
+        text: Texto completo del documento
+        filename: Nombre original del archivo (opcional, recomendado)
+
+    Returns:
+        ID del proyecto o None si no se encuentra
+    """
+    t = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    if not t.strip():
+        return None
+
+    # 1) Etiquetas (tu lógica actual)
+    best_id: str | None = None
+    best_score: tuple[int, int, int] | None = None
+
     for label_re, label_priority in _PROJECT_ID_LABELS:
         for m in label_re.finditer(t):
             lookahead_end = m.end() + _PROJECT_ID_LOOKAHEAD_CHARS
             lookahead = t[m.end() : lookahead_end]
-            # Tolerancia por extraccion en tablas (DOCX/PDF)
             lookahead = lookahead.replace("|", " ").replace("\n", " ")
 
             id_match = _PROJECT_ID_TOKEN_RE.search(lookahead)
@@ -615,4 +672,22 @@ def extract_project_id(text: str) -> str | None:
                 best_score = score
                 best_id = candidate
 
-    return best_id
+    if best_id:
+        return best_id
+
+    # 2) Filename (muy confiable en tu caso: NSC.C.007 / NSC.B.003)
+    from_name = _extract_project_id_from_filename(filename or "")
+    if from_name:
+        return from_name
+
+    # 3) Fallback por encabezados tipo "MCC.021.001"
+    header_re = re.compile(r"\b(?P<prefix>[A-Z]{2,10}\.\d{3})\.(?P<num>\d{3})\b")
+    prefixes = [m.group("prefix").upper() for m in header_re.finditer(t)]
+    if prefixes:
+        most_common_prefix, count = Counter(prefixes).most_common(1)[0]
+        if count >= 3:
+            # Si tu validador no acepta 2 segmentos (MCC.021), lo devolvemos igual
+            return most_common_prefix
+
+    # 4) Último recurso: buscar token en todo el texto
+    return _extract_project_id_anywhere(t)

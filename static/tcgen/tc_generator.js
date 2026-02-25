@@ -40,7 +40,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // ✅ NUEVO: Assigned To + métrica Area Path
   const assignedInput = document.getElementById("id_assigned_to");
   const mArea = document.getElementById("mArea");
+// ✅ NUEVO: Preview de requerimientos (resumen)
+const reqPreview = document.getElementById("reqPreview");
+const reqPid = document.getElementById("reqPid");
+const reqCount = document.getElementById("reqCount");
+const reqPreviewBtn = document.getElementById("reqPreviewBtn");
 
+let lastPreview = null;
+let analyzeAbort = null;
   // Estado local (evita depender de fileInput.files en drag & drop)
   let selectedFile = null;
 
@@ -120,7 +127,145 @@ document.addEventListener("DOMContentLoaded", () => {
     const name = (file?.name || "").toLowerCase();
     return ALLOWED_EXTS.some(ext => name.endsWith(ext));
   }
+    function escapeHtml(s) {
+    return String(s ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
 
+function clearReqPreview() {
+  lastPreview = null;
+  if (reqPreview) reqPreview.hidden = true;
+  if (reqPid) reqPid.textContent = "—";
+  if (reqCount) reqCount.textContent = "0";
+  if (reqPreviewBtn) reqPreviewBtn.disabled = true;
+}
+
+function renderReqPreview(preview) {
+  if (!reqPreview) return;
+
+  const pid = preview?.project_id || "No detectado";
+  const reqs = Array.isArray(preview?.requirements) ? preview.requirements : [];
+  const total = Number(preview?.total_blocks ?? reqs.length ?? 0);
+
+  if (reqPid) reqPid.textContent = pid;
+  if (reqCount) reqCount.textContent = String(total);
+
+  reqPreview.hidden = false;
+  if (reqPreviewBtn) reqPreviewBtn.disabled = reqs.length === 0;
+}
+
+
+
+function openReqModal(preview) {
+  const pid = preview?.project_id || "No detectado";
+  const reqs = Array.isArray(preview?.requirements) ? preview.requirements : [];
+  const total = Number(preview?.total_blocks ?? reqs.length ?? 0);
+
+  const items = reqs
+    .map((r) => {
+      const cleanTitle = cleanRequirementTitle(r.title, r.number);
+      return `
+        <li class="req-item">
+          <span class="req-num">${escapeHtml(r.number)}.</span>
+          <span class="req-title">${escapeHtml(cleanTitle || r.title || "")}</span>
+        </li>
+      `;
+    })
+    .join("");
+
+  const html = `
+    <div class="req-modal">
+      <div class="req-modal__header">
+        <div class="req-modal__title">Requerimientos detectados</div>
+        <div class="req-modal__badges">
+          <span class="badge-mini">🧩 ID: ${escapeHtml(pid)}</span>
+          <span class="badge-mini">📌 Total: ${escapeHtml(total)}</span>
+        </div>
+      </div>
+
+      <div class="req-modal__list">
+        <ul class="req-list">
+          ${items || "<li class='req-item'><span class='req-title'>Sin requerimientos.</span></li>"}
+        </ul>
+      </div>
+    </div>
+  `;
+
+  Swal.fire({
+    title: "",
+    html,
+    width: "min(920px, 92vw)",
+    confirmButtonText: "Cerrar",
+    allowOutsideClick: true,
+    allowEscapeKey: true,
+  });
+}
+
+  async function analyzeDocument(file) {
+    if (!form) return;
+    const analyzeUrl = form.dataset.analyzeUrl;
+    if (!analyzeUrl) return;
+
+    // Cancela análisis anterior si el usuario cambia de archivo rápido
+    if (analyzeAbort) analyzeAbort.abort();
+    analyzeAbort = new AbortController();
+
+    try {
+      const csrf = getCookie("csrftoken");
+      const fd = new FormData();
+      fd.set("document", file, file.name);
+
+      const resp = await fetch(analyzeUrl, {
+        method: "POST",
+        body: fd,
+        headers: { "X-CSRFToken": csrf },
+        credentials: "same-origin",
+        signal: analyzeAbort.signal,
+      });
+
+      const ct = (resp.headers.get("content-type") || "").toLowerCase();
+      const data = ct.includes("application/json") ? await resp.json() : null;
+
+      if (!resp.ok) {
+        const msg = data?.message || "No se pudo analizar el documento.";
+        throw new Error(msg);
+      }
+
+      lastPreview = data;
+      renderReqPreview(lastPreview);
+
+    } catch (err) {
+      // Si fue abort, no molestamos al usuario
+      if (err?.name === "AbortError") return;
+
+      clearReqPreview();
+      Toast.fire({ icon: "error", title: err?.message || "No se pudo analizar el documento." });
+    }
+  }
+
+function cleanRequirementTitle(title, number) {
+  let t = String(title ?? "").trim();
+  const n = String(number ?? "").trim();
+
+  // Quita prefijos repetidos tipo:
+  // "1. X", "1) X", "1 - X", "#1 X"
+  const patterns = [
+    new RegExp(`^\\s*#\\s*${n}\\s+`, "i"),
+    new RegExp(`^\\s*${n}\\s*[.)-]\\s+`, "i"),
+    // casos como "1. 1. X"
+    new RegExp(`^\\s*${n}\\s*\\.\\s*${n}\\s*\\.\\s+`, "i"),
+  ];
+
+  for (const rx of patterns) {
+    t = t.replace(rx, "");
+  }
+  return t.trim();
+}
+  
   function getAssignedToOrNull() {
     const v = (assignedInput?.value || "").trim();
     return v || null;
@@ -211,6 +356,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (fileInput) fileInput.value = "";
     setFileSelectedUI(null);
     resetUIForNewRun();
+    clearReqPreview(); // ✅ NUEVO
   }
 
   async function downloadCsvNoReload(downloadUrl) {
@@ -420,6 +566,10 @@ if (readyCard) show(readyCard);
     selectedFile = file || null;
     setFileSelectedUI(selectedFile);
     resetUIForNewRun();
+
+    // ✅ NUEVO: analizar y mostrar lista de requerimientos
+    clearReqPreview();
+    if (selectedFile) analyzeDocument(selectedFile);
   }
 
   if (fileUiBtn && fileInput) fileUiBtn.addEventListener("click", () => fileInput.click());
@@ -553,7 +703,11 @@ if (readyCard) show(readyCard);
       }
     });
   }
-
+  if (reqPreviewBtn) {
+  reqPreviewBtn.addEventListener("click", () => {
+    if (lastPreview && !reqPreviewBtn.disabled) openReqModal(lastPreview);
+  });
+}
   // Init
   setFileSelectedUI(null);
   resetMetrics();

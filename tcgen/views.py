@@ -26,6 +26,9 @@ from django.views.decorators.http import require_http_methods
 from core.extractor import SUPPORTED_EXTS
 from tcgen.services.orchestrator import iter_stream, run_sync
 from tcgen.utils.validators import validate_extension, validate_prompt_file, validate_size
+from core.extractor import extract_text_from_upload
+from core.requirements_splitter import extract_project_id
+from core.requirements_segmenter import segment_requirements_flexible
 
 # IDs de Trazabilidad Técnica:
 # - TCGEN-WEB-020: Vistas HTTP para carga de PDD, generación y descarga de CSV.
@@ -54,6 +57,70 @@ UI_ERR_ASSIGNED_TO: Final[str] = (
     "Assigned To is required. Please use the exact display name from Azure DevOps."
 )
 
+@require_http_methods(["POST"])
+def analyze_document(request: HttpRequest) -> JsonResponse:
+    """
+    Analiza el documento (PDD/FDD) y retorna:
+    - project_id detectado
+    - método de segmentación usado
+    - lista de requerimientos detectados (número + título)
+
+    Nota: NO ejecuta Claude. Solo extracción + segmentación.
+    """
+    uploaded = request.FILES.get("document")
+    if not uploaded:
+        return _json_error(status=400, code="ERR_NO_FILE", message=UI_ERR_NO_FILE)
+
+    filename = uploaded.name or ""
+    file_size = int(getattr(uploaded, "size", 0) or 0)
+
+    # Validaciones básicas (sin depender del prompt).
+    vr = validate_extension(filename, SUPPORTED_EXTS)
+    if not vr.ok:
+        return _json_error(status=400, code="ERR_BAD_EXT", message=vr.message or UI_ERR_BAD_EXT)
+
+    vr = validate_size(file_size, settings.MAX_UPLOAD_MB)
+    if not vr.ok:
+        return _json_error(status=400, code="ERR_TOO_LARGE", message=vr.message or UI_ERR_TOO_LARGE)
+
+    try:
+        file_bytes = uploaded.read()
+
+        doc_text = extract_text_from_upload(filename, file_bytes)
+        project_id = extract_project_id(doc_text, filename=filename)
+
+        seg = segment_requirements_flexible(doc_text, project_id=(project_id or ""))
+
+        requirements = [
+            {
+                "number": int(b.requirement_number),
+                "title": (b.scenario_name or "").strip(),
+            }
+            for b in (seg.blocks or [])
+        ]
+
+        # Control simple para evitar payloads enormes en UI (opcional).
+        MAX_REQS = 300
+        truncated = False
+        if len(requirements) > MAX_REQS:
+            requirements = requirements[:MAX_REQS]
+            truncated = True
+
+        return JsonResponse(
+            {
+                "ok": True,
+                "project_id": project_id,
+                "method": seg.method,
+                "total_blocks": len(seg.blocks or []),
+                "requirements": requirements,
+                "truncated": truncated,
+            },
+            json_dumps_params={"ensure_ascii": False},
+        )
+
+    except Exception:
+        logger.exception("Analyze document failed")
+        return _json_error(status=500, code="ERR_ANALYZE", message="No se pudo analizar el documento.")
 
 def _session_key() -> str:
     """Obtiene la clave de sesión usada para almacenar el último resultado."""

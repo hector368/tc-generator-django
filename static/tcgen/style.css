@@ -1334,3 +1334,55 @@ input[type="text"]::placeholder{
   opacity: 0.8;
 }
 
+/* Card summary */
+.req-summary__row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+.req-summary__left{ display:flex; flex-direction:column; gap:8px; }
+.req-summary__badges{ display:flex; flex-wrap:wrap; gap:8px; }
+
+/* Modal */
+.req-modal{ text-align:left; }
+.req-modal__header{ display:flex; flex-direction:column; gap:10px; }
+.req-modal__title{ font-weight:800; font-size:18px; color:var(--text); }
+.req-modal__badges{ display:flex; flex-wrap:wrap; gap:8px; }
+
+.req-modal__list{
+  margin-top:12px;
+  max-height:56vh;
+  overflow:auto;
+  padding-right:6px;
+}
+
+.req-list{
+  list-style:none;
+  padding:0;
+  margin:0;
+  display:grid;
+  gap:8px;
+}
+
+.req-item{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  padding:10px 12px;
+  border:1px solid rgba(140,120,255,0.20);
+  border-radius:12px;
+  background: rgba(255,255,255,0.55);
+}
+
+.req-num{
+  min-width:42px;
+  font-weight:800;
+  color:var(--primary);
+}
+
+.req-title{
+  color:var(--text);
+  font-size: var(--text-sm);
+  line-height:1.45;
+}

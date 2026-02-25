@@ -12,4 +12,5 @@ urlpatterns = [
     path("", views.home, name="tcgen_home"),
     path("generate/stream/", views.generate_stream, name="tcgen_generate_stream"),
     path("download/", views.download_csv, name="tcgen_download"),
+    path("analyze/", views.analyze_document, name="tcgen_analyze"),  
 ]
