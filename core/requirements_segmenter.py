@@ -63,6 +63,78 @@ _TITLE_LOOKS_LIKE_SECTION_RE: Final[re.Pattern[str]] = re.compile(
 )
 _ONLY_NUMBER_OR_DOTTED_RE: Final[re.Pattern[str]] = re.compile(r"^\d+(\.\d+)?$")
 
+# Detecta "dot leaders" de índice/TOC, e.g. "............. 10"
+_TOC_LEADER_RE: Final[re.Pattern[str]] = re.compile(r"\.{3,}\s*\d+\s*$")
+_TOC_DOTS_RE: Final[re.Pattern[str]] = re.compile(r"\.{10,}")
+
+
+# -----------------------------------------------------------------------------
+# Helpers (anti-TOC para hash steps)
+# -----------------------------------------------------------------------------
+def _clean_toc_title(title: str) -> str:
+    t = (title or "").strip()
+    # Quita "..... 10" al final
+    t = _TOC_LEADER_RE.sub("", t).strip()
+    # Normaliza espacios
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def _is_toc_hash_line(line: str) -> bool:
+    """
+    True si la línea parece de índice/TOC, por ejemplo:
+      "#1 Login Favorita..............10"
+    """
+    s = (line or "").strip()
+    if not s:
+        return False
+    return bool(_TOC_DOTS_RE.search(s) and _TOC_LEADER_RE.search(s))
+
+
+def _fix_hash_line_breaks(text: str) -> str:
+    """
+    Algunos PDFs extraen:
+      "#\n1 Title"
+    Lo unimos a:
+      "#1 Title"
+    """
+    t = (text or "")
+    t = re.sub(r"\n\s*#\s*\n\s*(\d{1,3})\s+", r"\n#\1 ", t)
+    return t
+
+
+def _hash_step_quality_score(candidate: str) -> tuple[int, int, int]:
+    """
+    Scoring para elegir el mejor 'body' para hash steps.
+
+    Retorna (good_count, median_gap, -toc_penalty) donde:
+    - good_count: headers '#N' que NO son TOC
+    - median_gap: mediana de distancia entre headers (TOC tiende a gaps pequeños)
+    - toc_penalty: cantidad de líneas tipo dot leaders
+    """
+    c = _fix_hash_line_breaks(candidate)
+    matches = list(_HASH_STEP_RE.finditer(c))
+    if len(matches) < 3:
+        return (0, 0, 0)
+
+    good = []
+    for m in matches:
+        if _is_toc_hash_line(m.group(0) or ""):
+            continue
+        good.append(m)
+
+    if len(good) < 3:
+        return (0, 0, 0)
+
+    gaps = []
+    for i in range(len(good) - 1):
+        gaps.append(good[i + 1].start() - good[i].start())
+    gaps.sort()
+    median_gap = gaps[len(gaps) // 2] if gaps else 0
+
+    toc_penalty = len(re.findall(r"(?m)\.{10,}\s*\d+\s*$", c))
+    return (len(good), median_gap, -toc_penalty)
+
 
 # -----------------------------------------------------------------------------
 # API principal
@@ -75,8 +147,7 @@ def segment_requirements_flexible(doc_text: str, *, project_id: str) -> Segmenta
     1) TO-BE clásico (2.4) usando tu lógica actual
     2) REQ IDs tipo "<PREFIX>.<NNN>" (ej. MCC.021.001) con título en misma línea
        o en la siguiente (PDF/tablas)
-    3) HASH steps: "#1 Título" (ideal para PDDs como NSC.C.007) con recorte para
-       evitar TOC/índice
+    3) HASH steps: "#1 Título" (ideal para PDDs NSC) con recorte/anti-TOC
     4) Process steps numéricos (fallback estricto) "1. Title" / "1 Title" / "1" + title
     5) none si no se detecta nada
     """
@@ -96,7 +167,7 @@ def segment_requirements_flexible(doc_text: str, *, project_id: str) -> Segmenta
     if blocks:
         return SegmentationResult(blocks=blocks, context_text=text, method="req_id")
 
-    # 3) PDD por "#<n> <title>" dentro del bloque real de process steps
+    # 3) PDD por "#<n> <title>" dentro del bloque real (anti-TOC)
     hash_body = _slice_best_process_steps_body(text, prefer_hash_steps=True)
     if hash_body:
         blocks = _segment_by_hash_steps(hash_body)
@@ -178,7 +249,7 @@ def _extract_title_after_id(t: str, pos: int) -> str:
     - Si viene en la misma línea después del ID, úsalo.
     - Si el ID está solo, toma la siguiente línea no vacía.
     """
-    window = t[pos : pos + 500].lstrip()
+    window = t[pos: pos + 500].lstrip()
 
     # Caso A: título en la misma línea
     first_line = window.split("\n", 1)[0].strip()
@@ -216,8 +287,8 @@ def _slice_best_process_steps_body(text: str, *, prefer_hash_steps: bool) -> str
     capturar el índice/TOC.
 
     Selecciona el mejor candidato en base a:
-    - cantidad de "#<n>" si prefer_hash_steps=True
-    - cantidad de pasos numéricos si prefer_hash_steps=False
+    - si prefer_hash_steps=True: score por headers '#N' NO-TOC + gaps grandes
+    - si prefer_hash_steps=False: cantidad de pasos numéricos válidos
     """
     t = (text or "").replace("\r\n", "\n").replace("\r", "\n")
     if not t.strip():
@@ -225,10 +296,12 @@ def _slice_best_process_steps_body(text: str, *, prefer_hash_steps: bool) -> str
 
     headings = list(_PROCESS_STEPS_HEADING_RE.finditer(t))
     if not headings:
+        # Importante: para NSC con índice arriba, aun puede haber '#'
+        # pero sin heading "Process steps". Se podría extender en futuro.
         return ""
 
     best_slice = ""
-    best_score = 0
+    best_score = None  # tuple comparable
 
     for h in headings:
         start = h.start()
@@ -242,21 +315,30 @@ def _slice_best_process_steps_body(text: str, *, prefer_hash_steps: bool) -> str
             continue
 
         if prefer_hash_steps:
-            score = len(_HASH_STEP_RE.findall(candidate))
+            # Nuevo: score anti-TOC
+            score = _hash_step_quality_score(candidate)
         else:
-            score = _count_numeric_step_candidates(candidate)
+            score = (_count_numeric_step_candidates(candidate), 0, 0)
 
-        if score > best_score:
+        if best_score is None or score > best_score:
             best_score = score
             best_slice = candidate
 
-    # Umbrales mínimos para evitar devolver TOC:
-    if prefer_hash_steps and best_score >= 5:
-        return best_slice
-    if (not prefer_hash_steps) and best_score >= 8:
-        return best_slice
+    if not best_slice:
+        return ""
 
-    return ""
+    # Umbrales mínimos para evitar devolver TOC:
+    if prefer_hash_steps:
+        good_count, median_gap, _neg_toc = best_score or (0, 0, 0)
+        # good_count suficiente y gaps no ridículamente pequeños (TOC ~1 línea)
+        if good_count >= 3 and median_gap >= 40:
+            return best_slice
+        return ""
+    else:
+        cnt, _, _ = best_score or (0, 0, 0)
+        if cnt >= 8:
+            return best_slice
+        return ""
 
 
 def _count_numeric_step_candidates(text: str) -> int:
@@ -278,24 +360,37 @@ def _count_numeric_step_candidates(text: str) -> int:
 def _segment_by_hash_steps(body: str) -> list[RequirementBlock]:
     """
     Segmenta por pasos tipo "#1 Title" dentro del body recortado.
+
+    Importante: filtra entradas de TOC para evitar bloques tipo:
+      "#1 Login Favorita..............10"
     """
-    b = (body or "").replace("\r\n", "\n").replace("\r", "\n")
+    b = _fix_hash_line_breaks((body or "").replace("\r\n", "\n").replace("\r", "\n"))
     matches = list(_HASH_STEP_RE.finditer(b))
     if len(matches) < 3:
         return []
 
+    # Filtra matches TOC
+    filtered = [m for m in matches if not _is_toc_hash_line(m.group(0) or "")]
+    if len(filtered) < 3:
+        return []
+
     blocks: list[RequirementBlock] = []
-    for idx, m in enumerate(matches):
+    for idx, m in enumerate(filtered):
         num = int(m.group("num"))
-        title = m.group("title").strip()
+        title = _clean_toc_title(m.group("title").strip())
 
         if not _looks_like_title(title, max_len=160):
             title = f"Step #{num}"
 
         start = m.start()
-        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(b)
+        end = filtered[idx + 1].start() if idx + 1 < len(filtered) else len(b)
         chunk = b[start:end].strip()
         if not chunk:
+            continue
+
+        # Guardia anti-TOC: si el bloque es demasiado corto, casi seguro era índice/ruido
+        # (en el body real casi siempre hay texto adicional)
+        if len(chunk) < 120:
             continue
 
         blocks.append(
@@ -305,6 +400,10 @@ def _segment_by_hash_steps(body: str) -> list[RequirementBlock]:
                 input_text=chunk,
             )
         )
+
+    # Si quedó demasiado poco, evita falsos positivos
+    if len(blocks) < 3:
+        return []
 
     return blocks
 
@@ -443,7 +542,6 @@ def _pick_best_consecutive_run(
             expected_next = 2
             continue
 
-        # Si el salto es pequeño (ej. 5 -> 7), NO lo aceptamos como run consecutivo
         if len(current) > len(best):
             best = current
         current = [item]

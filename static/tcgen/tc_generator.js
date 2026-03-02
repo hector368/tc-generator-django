@@ -41,13 +41,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const assignedInput = document.getElementById("id_assigned_to");
   const mArea = document.getElementById("mArea");
 // ✅ NUEVO: Preview de requerimientos (resumen)
-const reqPreview = document.getElementById("reqPreview");
-const reqPid = document.getElementById("reqPid");
-const reqCount = document.getElementById("reqCount");
-const reqPreviewBtn = document.getElementById("reqPreviewBtn");
-
-let lastPreview = null;
-let analyzeAbort = null;
+  const reqPreview = document.getElementById("reqPreview");
+  const reqPid = document.getElementById("reqPid");
+  const reqCount = document.getElementById("reqCount");
+  const reqPreviewBtn = document.getElementById("reqPreviewBtn");
+  const selectedRequirementsInput = document.getElementById("selectedRequirements");
+  const docType = document.getElementById("docType");
+  const selCountEl = document.getElementById("selCount");
+  // null => “todos”, array => solo esos
+  let selectedReqNums = null;
+  let lastPreview = null;
+  let analyzeAbort = null;
   // Estado local (evita depender de fileInput.files en drag & drop)
   let selectedFile = null;
 
@@ -108,6 +112,27 @@ let analyzeAbort = null;
   // -----------------------------
   // Helpers
   // -----------------------------
+  function getTotalReqs(preview) {
+  if (!preview) return 0;
+  const reqs = Array.isArray(preview.requirements) ? preview.requirements : [];
+  const total = Number(preview.total_blocks ?? reqs.length ?? 0);
+  return Number.isFinite(total) ? total : reqs.length;
+}
+
+function updateSelectedBadgeCount(preview) {
+  if (!selCountEl) return;
+
+  const total = getTotalReqs(preview);
+
+  // null => “todos”
+  const selected = (selectedReqNums === null)
+    ? total
+    : Array.isArray(selectedReqNums)
+      ? selectedReqNums.length
+      : 0;
+
+  selCountEl.textContent = String(selected);
+}
   function getCookie(name) {
     const value = `; ${document.cookie}`;
     const parts = value.split(`; ${name}=`);
@@ -142,6 +167,8 @@ function clearReqPreview() {
   if (reqPid) reqPid.textContent = "—";
   if (reqCount) reqCount.textContent = "0";
   if (reqPreviewBtn) reqPreviewBtn.disabled = true;
+  if (docType) docType.textContent = "—";
+  if (selCountEl) selCountEl.textContent = "0";
 }
 
 function renderReqPreview(preview) {
@@ -153,9 +180,13 @@ function renderReqPreview(preview) {
 
   if (reqPid) reqPid.textContent = pid;
   if (reqCount) reqCount.textContent = String(total);
+  if (docType) docType.textContent = getDocTypeLabel(preview?.method);
 
   reqPreview.hidden = false;
   if (reqPreviewBtn) reqPreviewBtn.disabled = reqs.length === 0;
+
+  // ✅ Actualiza "Selected" en la card (null => todos)
+  updateSelectedBadgeCount(preview);
 }
 
 
@@ -165,46 +196,154 @@ function openReqModal(preview) {
   const reqs = Array.isArray(preview?.requirements) ? preview.requirements : [];
   const total = Number(preview?.total_blocks ?? reqs.length ?? 0);
 
-  const items = reqs
-    .map((r) => {
-      const cleanTitle = cleanRequirementTitle(r.title, r.number);
-      return `
-        <li class="req-item">
-          <span class="req-num">${escapeHtml(r.number)}.</span>
-          <span class="req-title">${escapeHtml(cleanTitle || r.title || "")}</span>
-        </li>
-      `;
-    })
-    .join("");
-
   const html = `
     <div class="req-modal">
-      <div class="req-modal__header">
-        <div class="req-modal__title">Requerimientos detectados</div>
-        <div class="req-modal__badges">
-          <span class="badge-mini">🧩 ID: ${escapeHtml(pid)}</span>
-          <span class="badge-mini">📌 Total: ${escapeHtml(total)}</span>
-        </div>
+  <div class="req-modal__header">
+    <div class="req-modal__title">Select Requirements</div>
+    <div class="req-modal__badges">
+      <span class="badge-mini">🧩 ID: ${escapeHtml(pid)}</span>
+      <span class="badge-mini">📌 Requirements: ${escapeHtml(total)}</span>
+      <span class="badge-mini">✅ Selected: <span id="modalSelCount">0</span></span>
+    </div>
+
+    <div class="req-modal__toolbar">
+      <div class="req-toolbar__actions">
+        <button type="button" class="req-chip" id="selAllBtn">
+          <span class="req-chip__icon">✅</span>
+          Select all
+        </button>
+
+        <button type="button" class="req-chip req-chip--ghost" id="selNoneBtn">
+          <span class="req-chip__icon">🧹</span>
+          Clear
+        </button>
       </div>
 
-      <div class="req-modal__list">
-        <ul class="req-list">
-          ${items || "<li class='req-item'><span class='req-title'>Sin requerimientos.</span></li>"}
-        </ul>
-      </div>
+      <input type="text" class="input" id="selSearch" placeholder="Search..." />
     </div>
-  `;
+  </div>
+
+  <div class="req-modal__list">
+    <ul class="req-list" id="reqSelectList">
+      ${
+        reqs.map((r) => {
+          const cleanTitle = cleanRequirementTitle(r.title, r.number);
+          return `
+            <li class="req-item">
+              <label class="req-check">
+                <input type="checkbox" class="req-checkbox" data-num="${escapeHtml(r.number)}" />
+                <span class="req-num">${escapeHtml(r.number)}.</span>
+                <span class="req-title">${escapeHtml(cleanTitle || r.title || "")}</span>
+              </label>
+            </li>
+          `;
+        }).join("")
+      }
+    </ul>
+  </div>
+</div>
+`;
 
   Swal.fire({
     title: "",
     html,
-    width: "min(920px, 92vw)",
-    confirmButtonText: "Cerrar",
+    width: "min(980px, 92vw)",
+    showCancelButton: true,
+    confirmButtonText: "Apply selection",
+    cancelButtonText: "Cancel",
     allowOutsideClick: true,
     allowEscapeKey: true,
+    didOpen: () => {
+  const root = Swal.getHtmlContainer(); // 👈 SOLO el DOM del modal
+
+  const list = root.querySelector("#reqSelectList");
+  const selCount = root.querySelector("#modalSelCount");
+  const allBtn = root.querySelector("#selAllBtn");
+  const noneBtn = root.querySelector("#selNoneBtn");
+  const search = root.querySelector("#selSearch");
+
+  const checkboxes = Array.from(root.querySelectorAll(".req-checkbox"));
+
+  const preselected = selectedReqNums === null
+    ? null
+    : new Set(selectedReqNums.map(Number));
+
+  for (const cb of checkboxes) {
+    const num = Number(cb.dataset.num);
+    cb.checked = (preselected === null) ? true : preselected.has(num);
+  }
+
+  const updateCount = () => {
+    const count = checkboxes.filter(cb => cb.checked).length;
+    if (selCount) selCount.textContent = String(count);
+  };
+
+  updateCount(); // 👈 ahora sí actualiza el del modal
+
+  checkboxes.forEach(cb => cb.addEventListener("change", updateCount));
+
+  if (allBtn) allBtn.addEventListener("click", () => {
+    checkboxes.forEach(cb => cb.checked = true);
+    updateCount();
+  });
+
+  if (noneBtn) noneBtn.addEventListener("click", () => {
+    checkboxes.forEach(cb => cb.checked = false);
+    updateCount();
+  });
+
+  if (search && list) {
+    search.addEventListener("input", () => {
+      const q = search.value.trim().toLowerCase();
+      const items = Array.from(list.querySelectorAll(".req-item"));
+      for (const it of items) {
+        it.style.display = it.textContent.toLowerCase().includes(q) ? "" : "none";
+      }
+    });
+  }
+},
+    preConfirm: () => {
+      const checkboxes = Array.from(document.querySelectorAll(".req-checkbox"));
+      const selected = checkboxes
+        .filter(cb => cb.checked)
+        .map(cb => Number(cb.dataset.num))
+        .filter(n => Number.isFinite(n));
+
+      // Si selecciona 0, bloquea (para evitar que generes “nada” por accidente)
+      if (selected.length === 0) {
+        Swal.showValidationMessage("Selecciona al menos un requerimiento.");
+        return false;
+      }
+
+      return selected;
+    },
+  }).then((result) => {
+    if (!result.isConfirmed) return;
+
+    const selected = result.value || [];
+    // Si selecciona todos, guardamos null => “todos”
+    if (Array.isArray(selected) && lastPreview?.requirements?.length) {
+      if (selected.length === lastPreview.requirements.length) {
+        selectedReqNums = null;
+        if (selectedRequirementsInput) selectedRequirementsInput.value = "";
+      } else {
+        selectedReqNums = selected;
+        if (selectedRequirementsInput) {
+          selectedRequirementsInput.value = selected.join(",");
+        }
+      }
+    }
+    updateSelectedBadgeCount(lastPreview);
   });
 }
 
+
+function getDocTypeLabel(method) {
+  const m = String(method || "").trim().toLowerCase();
+  if (!m) return "Undetermined";
+  if (m === "tobe") return "PDD Beecker";
+  return "External FDD";
+}
   async function analyzeDocument(file) {
     if (!form) return;
     const analyzeUrl = form.dataset.analyzeUrl;
@@ -236,16 +375,24 @@ function openReqModal(preview) {
       }
 
       lastPreview = data;
-      renderReqPreview(lastPreview);
+renderReqPreview(lastPreview);
 
-    } catch (err) {
-      // Si fue abort, no molestamos al usuario
-      if (err?.name === "AbortError") return;
+// Default: todos seleccionados cuando se analiza un archivo nuevo
+selectedReqNums = null;
+if (selectedRequirementsInput) selectedRequirementsInput.value = "";
+updateSelectedBadgeCount(lastPreview);
 
-      clearReqPreview();
-      Toast.fire({ icon: "error", title: err?.message || "No se pudo analizar el documento." });
-    }
-  }
+} catch (err) {
+  // Si fue abort, no molestamos al usuario
+  if (err?.name === "AbortError") return;
+
+  clearReqPreview();
+  Toast.fire({
+    icon: "error",
+    title: err?.message || "No se pudo analizar el documento.",
+  });
+}
+}
 
 function cleanRequirementTitle(title, number) {
   let t = String(title ?? "").trim();
@@ -654,7 +801,13 @@ if (readyCard) show(readyCard);
 
         // (assigned_to ya viene en el form, pero lo dejamos explícito por claridad)
         fd.set("assigned_to", assignedTo);
-
+        // ✅ Enviar selección de requerimientos (si aplica)
+        const sel = (selectedRequirementsInput?.value || "").trim();
+        if (sel) {
+          fd.set("selected_requirements", sel);   // ej. "7,10,11"
+        } else {
+          fd.delete("selected_requirements");     // vacío => “todos”
+        }
         await generateViaStream(streamUrl, fd, csrf);
 
       } catch (err) {

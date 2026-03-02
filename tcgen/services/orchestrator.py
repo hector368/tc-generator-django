@@ -64,6 +64,7 @@ def run_sync(
     original_filename: str,
     file_bytes: bytes,
     assigned_to: str,
+    selected_requirements: list[int] | None = None,  # ✅ NUEVO
 ) -> dict[str, Any]:
     """
     Ejecuta la generación en modo sincrónico.
@@ -74,6 +75,7 @@ def run_sync(
         filename=original_filename,
         file_bytes=file_bytes,
         assigned_to=assigned_to,
+        selected_requirements=selected_requirements,  # ✅ NUEVO
     )
 
     filename = result.download_filename or build_download_filename(original_filename)
@@ -92,6 +94,7 @@ def iter_stream(
     original_filename: str,
     file_bytes: bytes,
     assigned_to: str,
+    selected_requirements: list[int] | None = None,  # ✅ NUEVO
 ) -> Iterator[dict[str, Any]]:
     """
     Genera eventos para streaming NDJSON.
@@ -107,6 +110,7 @@ def iter_stream(
         filename=original_filename,
         file_bytes=file_bytes,
         assigned_to=assigned_to,
+        selected_requirements=selected_requirements,  # ✅ NUEVO
     ):
         if evt.get("type") != EVENT_DONE:
             yield evt

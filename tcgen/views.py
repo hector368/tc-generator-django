@@ -6,13 +6,14 @@ Este módulo expone:
 - La generación sincrónica (fallback).
 - La generación por streaming (NDJSON).
 - La descarga del CSV desde sesión.
+- El análisis del documento (detección de ID + requerimientos) sin ejecutar LLM.
 """
-
 from __future__ import annotations
 
 # Importaciones de la librería estándar.
 import json
 import logging
+import re
 from typing import Any, Final, Iterator
 
 # Importaciones de terceros (Django).
@@ -23,17 +24,17 @@ from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
 # Importaciones del proyecto.
-from core.extractor import SUPPORTED_EXTS
+from core.extractor import SUPPORTED_EXTS, extract_text_from_upload
+from core.requirements_segmenter import segment_requirements_flexible
+from core.requirements_splitter import extract_project_id
 from tcgen.services.orchestrator import iter_stream, run_sync
 from tcgen.utils.validators import validate_extension, validate_prompt_file, validate_size
-from core.extractor import extract_text_from_upload
-from core.requirements_splitter import extract_project_id
-from core.requirements_segmenter import segment_requirements_flexible
 
 # IDs de Trazabilidad Técnica:
-# - TCGEN-WEB-020: Vistas HTTP para carga de PDD, generación y descarga de CSV.
+# - TCGEN-WEB-020: Vistas HTTP para carga de PDD/FDD, generación y descarga de CSV.
 # - TCGEN-WEB-021: Contrato de eventos NDJSON para progreso en frontend.
 # - TCGEN-WEB-022: Persistencia del último resultado en sesión para descarga posterior.
+# - TCGEN-WEB-023: Análisis previo (ID + requerimientos) sin invocar LLM.
 
 logger = logging.getLogger(__name__)
 
@@ -56,71 +57,8 @@ UI_ERR_ENGINE: Final[str] = (
 UI_ERR_ASSIGNED_TO: Final[str] = (
     "Assigned To is required. Please use the exact display name from Azure DevOps."
 )
+UI_ERR_ANALYZE: Final[str] = "No se pudo analizar el documento."
 
-@require_http_methods(["POST"])
-def analyze_document(request: HttpRequest) -> JsonResponse:
-    """
-    Analiza el documento (PDD/FDD) y retorna:
-    - project_id detectado
-    - método de segmentación usado
-    - lista de requerimientos detectados (número + título)
-
-    Nota: NO ejecuta Claude. Solo extracción + segmentación.
-    """
-    uploaded = request.FILES.get("document")
-    if not uploaded:
-        return _json_error(status=400, code="ERR_NO_FILE", message=UI_ERR_NO_FILE)
-
-    filename = uploaded.name or ""
-    file_size = int(getattr(uploaded, "size", 0) or 0)
-
-    # Validaciones básicas (sin depender del prompt).
-    vr = validate_extension(filename, SUPPORTED_EXTS)
-    if not vr.ok:
-        return _json_error(status=400, code="ERR_BAD_EXT", message=vr.message or UI_ERR_BAD_EXT)
-
-    vr = validate_size(file_size, settings.MAX_UPLOAD_MB)
-    if not vr.ok:
-        return _json_error(status=400, code="ERR_TOO_LARGE", message=vr.message or UI_ERR_TOO_LARGE)
-
-    try:
-        file_bytes = uploaded.read()
-
-        doc_text = extract_text_from_upload(filename, file_bytes)
-        project_id = extract_project_id(doc_text, filename=filename)
-
-        seg = segment_requirements_flexible(doc_text, project_id=(project_id or ""))
-
-        requirements = [
-            {
-                "number": int(b.requirement_number),
-                "title": (b.scenario_name or "").strip(),
-            }
-            for b in (seg.blocks or [])
-        ]
-
-        # Control simple para evitar payloads enormes en UI (opcional).
-        MAX_REQS = 300
-        truncated = False
-        if len(requirements) > MAX_REQS:
-            requirements = requirements[:MAX_REQS]
-            truncated = True
-
-        return JsonResponse(
-            {
-                "ok": True,
-                "project_id": project_id,
-                "method": seg.method,
-                "total_blocks": len(seg.blocks or []),
-                "requirements": requirements,
-                "truncated": truncated,
-            },
-            json_dumps_params={"ensure_ascii": False},
-        )
-
-    except Exception:
-        logger.exception("Analyze document failed")
-        return _json_error(status=500, code="ERR_ANALYZE", message="No se pudo analizar el documento.")
 
 def _session_key() -> str:
     """Obtiene la clave de sesión usada para almacenar el último resultado."""
@@ -132,9 +70,9 @@ def _json_error(*, status: int, code: str, message: str) -> JsonResponse:
     return JsonResponse({"ok": False, "code": code, "message": message}, status=status)
 
 
-def _validate_upload(*, filename: str, file_size: int) -> JsonResponse | None:
+def _validate_generation_upload(*, filename: str, file_size: int) -> JsonResponse | None:
     """
-    Valida prompt, extensión y tamaño del archivo.
+    Valida prompt, extensión y tamaño del archivo (para generación).
 
     Retorna JsonResponse si hay error; retorna None si todo es válido.
     """
@@ -165,11 +103,36 @@ def _validate_upload(*, filename: str, file_size: int) -> JsonResponse | None:
     return None
 
 
-def _get_upload_or_error(
+def _validate_analyze_upload(*, filename: str, file_size: int) -> JsonResponse | None:
+    """
+    Valida extensión y tamaño del archivo (para análisis).
+
+    Nota: aquí NO validamos PROMPT_FILE, porque el análisis no llama al LLM.
+    """
+    vr = validate_extension(filename, SUPPORTED_EXTS)
+    if not vr.ok:
+        return _json_error(
+            status=400,
+            code="ERR_BAD_EXT",
+            message=vr.message or UI_ERR_BAD_EXT,
+        )
+
+    vr = validate_size(file_size, settings.MAX_UPLOAD_MB)
+    if not vr.ok:
+        return _json_error(
+            status=400,
+            code="ERR_TOO_LARGE",
+            message=vr.message or UI_ERR_TOO_LARGE,
+        )
+
+    return None
+
+
+def _get_upload_for_generation_or_error(
     request: HttpRequest,
 ) -> tuple[UploadedFile, str, int, str] | JsonResponse:
     """
-    Obtiene el archivo cargado y valida lo esencial.
+    Obtiene el archivo cargado y valida lo esencial para GENERACIÓN.
 
     Retorna (uploaded, filename, file_size, assigned_to) si es válido; de lo contrario,
     retorna una respuesta JsonResponse de error.
@@ -189,11 +152,67 @@ def _get_upload_or_error(
     filename = uploaded.name or ""
     file_size = int(getattr(uploaded, "size", 0) or 0)
 
-    validation_error = _validate_upload(filename=filename, file_size=file_size)
+    validation_error = _validate_generation_upload(filename=filename, file_size=file_size)
     if validation_error:
         return validation_error
 
     return uploaded, filename, file_size, assigned_to
+
+
+def _get_upload_for_analyze_or_error(
+    request: HttpRequest,
+) -> tuple[UploadedFile, str, int] | JsonResponse:
+    """
+    Obtiene el archivo cargado y valida lo esencial para ANÁLISIS.
+
+    Retorna (uploaded, filename, file_size) si es válido; de lo contrario,
+    retorna una respuesta JsonResponse de error.
+    """
+    uploaded = request.FILES.get("document")
+    if not uploaded:
+        return _json_error(status=400, code="ERR_NO_FILE", message=UI_ERR_NO_FILE)
+
+    filename = uploaded.name or ""
+    file_size = int(getattr(uploaded, "size", 0) or 0)
+
+    validation_error = _validate_analyze_upload(filename=filename, file_size=file_size)
+    if validation_error:
+        return validation_error
+
+    return uploaded, filename, file_size
+
+
+def _parse_selected_requirements(raw: str | None) -> list[int] | None:
+    """
+    Parsea selección de requerimientos desde string:
+    - "7,10,11"
+    - "7 10 11"
+    - "7,10-12"  (soporta rangos)
+    Retorna None si viene vacío => significa "todos".
+    """
+    s = (raw or "").strip()
+    if not s:
+        return None
+
+    nums: set[int] = set()
+    parts = re.split(r"[,\s]+", s)
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+
+        if "-" in part:
+            a, b = part.split("-", 1)
+            a_i = int(a.strip())
+            b_i = int(b.strip())
+            if a_i > b_i:
+                a_i, b_i = b_i, a_i
+            for n in range(a_i, b_i + 1):
+                nums.add(n)
+        else:
+            nums.add(int(part))
+
+    return sorted(nums)
 
 
 @require_http_methods(["GET"])
@@ -203,17 +222,76 @@ def home(request: HttpRequest) -> HttpResponse:
 
 
 @require_http_methods(["POST"])
+def analyze_document(request: HttpRequest) -> JsonResponse:
+    """
+    Analiza el documento (PDD/FDD) y retorna:
+    - project_id detectado (usa filename como fallback)
+    - lista de requerimientos detectados (número + título)
+    - método de segmentación usado (útil para debug, aunque no se muestre en UI)
+
+    Nota: NO ejecuta Claude. Solo extracción + segmentación.
+    """
+    result = _get_upload_for_analyze_or_error(request)
+    if isinstance(result, JsonResponse):
+        return result
+
+    uploaded, filename, _file_size = result
+
+    try:
+        file_bytes = uploaded.read()
+
+        doc_text = extract_text_from_upload(filename, file_bytes)
+        project_id = extract_project_id(doc_text, filename=filename)  # ✅ evita None en NSC.*
+
+        seg = segment_requirements_flexible(doc_text, project_id=(project_id or ""))
+
+        requirements = [
+            {
+                "number": int(b.requirement_number),
+                "title": (b.scenario_name or "").strip(),
+            }
+            for b in (seg.blocks or [])
+        ]
+
+        # Evita payloads enormes (por seguridad UX)
+        max_reqs = 400
+        truncated = False
+        if len(requirements) > max_reqs:
+            requirements = requirements[:max_reqs]
+            truncated = True
+
+        return JsonResponse(
+            {
+                "ok": True,
+                "project_id": project_id,
+                "method": seg.method,
+                "total_blocks": len(seg.blocks or []),
+                "requirements": requirements,
+                "truncated": truncated,
+            },
+            json_dumps_params={"ensure_ascii": False},
+        )
+
+    except Exception:
+        logger.exception("Analyze document failed")
+        return _json_error(status=500, code="ERR_ANALYZE", message=UI_ERR_ANALYZE)
+
+
+@require_http_methods(["POST"])
 def generate(request: HttpRequest) -> JsonResponse:
     """
     Genera casos de prueba en modo sincrónico.
 
     Nota: Se mantiene este endpoint como fallback para no romper integraciones o pruebas existentes.
     """
-    result = _get_upload_or_error(request)
+    result = _get_upload_for_generation_or_error(request)
     if isinstance(result, JsonResponse):
         return result
 
     uploaded, filename, _file_size, assigned_to = result
+    selected_numbers = _parse_selected_requirements(
+        request.POST.get("selected_requirements")
+    )
 
     try:
         file_bytes = uploaded.read()
@@ -221,6 +299,7 @@ def generate(request: HttpRequest) -> JsonResponse:
             original_filename=filename,
             file_bytes=file_bytes,
             assigned_to=assigned_to,
+            selected_requirements=selected_numbers,  # ✅ NUEVO
         )
 
         if not (payload.get("csv_out") or "").strip():
@@ -257,11 +336,15 @@ def generate(request: HttpRequest) -> JsonResponse:
 @require_http_methods(["POST"])
 def generate_stream(request: HttpRequest) -> HttpResponse:
     """Genera casos de prueba en modo streaming (NDJSON)."""
-    result = _get_upload_or_error(request)
+    result = _get_upload_for_generation_or_error(request)
     if isinstance(result, JsonResponse):
         return result
 
     uploaded, filename, _file_size, assigned_to = result
+    selected_numbers = _parse_selected_requirements(
+        request.POST.get("selected_requirements")
+    )
+
     file_bytes = uploaded.read()
 
     def ndjson(obj: dict[str, Any]) -> str:
@@ -279,6 +362,7 @@ def generate_stream(request: HttpRequest) -> HttpResponse:
                 original_filename=filename,
                 file_bytes=file_bytes,
                 assigned_to=assigned_to,
+                selected_requirements=selected_numbers,  # ✅ NUEVO
             ):
                 if evt.get("type") == EVENT_DONE:
                     payload = {
@@ -316,9 +400,7 @@ def download_csv(request: HttpRequest) -> HttpResponse:
     payload = request.session.get(_session_key())
     if not payload:
         return HttpResponse(
-            (
-                "No generated CSV found in session. Please generate test cases first."
-            ),
+            "No generated CSV found in session. Please generate test cases first.",
             status=404,
             content_type=CONTENT_TYPE_TEXT,
         )

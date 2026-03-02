@@ -1,12 +1,11 @@
 """
-Motor de generación síncrona para el generador automático de Casos de Prueba
-(TCs).
+Motor de generación para el generador automático de Casos de Prueba (TCs).
 
 Flujo:
 1) Extrae texto del archivo (PDF/DOCX).
-2) Obtiene Project ID.
-3) Recorta la sección TO-BE (2.4).
-4) Divide por requerimiento/acción.
+2) Obtiene Project ID (con fallback por filename).
+3) Segmenta requerimientos (TO-BE / REQ IDs / HASH steps / process steps).
+4) (Opcional) Filtra requerimientos por selección del usuario.
 5) Llama al LLM por bloque y consolida la salida en CSV ADO.
 
 Este módulo emite eventos (dict) para consumo de UI.
@@ -21,17 +20,13 @@ from typing import Any, Final, Iterator
 
 from django.conf import settings
 
-from core.ado_csv import (
-    dump_ado_rows,
-    enforce_structure_and_titles,
-    parse_ado_rows,
-)
+from core.ado_csv import dump_ado_rows, enforce_structure_and_titles, parse_ado_rows
 from core.claude_client import call_claude, get_client
 from core.context_pack import build_context_pack
 from core.extractor import extract_text_from_upload
 from core.generator import extract_csv_only
-from core.requirements_splitter import extract_project_id
 from core.requirements_segmenter import segment_requirements_flexible
+from core.requirements_splitter import extract_project_id
 from core.stats import compute_csv_stats
 
 logger = logging.getLogger(__name__)
@@ -45,8 +40,8 @@ EVENT_ERROR: Final[str] = "error"
 # Códigos de error/success para la UI.
 ERR_ASSIGNED_TO: Final[str] = "ERR_ASSIGNED_TO"
 ERR_NO_PROJECT_ID: Final[str] = "ERR_NO_PROJECT_ID"
-ERR_NO_TOBE: Final[str] = "ERR_NO_TOBE"
 ERR_NO_REQS: Final[str] = "ERR_NO_REQS"
+ERR_NO_SELECTED_REQS: Final[str] = "ERR_NO_SELECTED_REQS"
 ERR_ENGINE: Final[str] = "ERR_ENGINE"
 
 OK_GENERATED: Final[str] = "OK_GENERATED"
@@ -54,13 +49,13 @@ OK_GENERATED: Final[str] = "OK_GENERATED"
 # Mensajes para la UI.
 MSG_ASSIGNED_TO_REQUIRED: Final[str] = "El campo 'Assigned To' es obligatorio."
 MSG_NO_PROJECT_ID: Final[str] = (
-    "No se encontró el Project ID en el documento (se esperaba 'ID proyecto')."
-)
-MSG_NO_TOBE: Final[str] = (
-    "No fue posible extraer la sección TO-BE (2.4) del documento."
+    "No se encontró el Project ID en el documento o en el nombre del archivo."
 )
 MSG_NO_REQS: Final[str] = (
     "No fue posible segmentar requerimientos (TO-BE / FDD / Process Steps)."
+)
+MSG_NO_SELECTED_REQS: Final[str] = (
+    "No se encontraron requerimientos para la selección indicada."
 )
 MSG_OK_GENERATED: Final[str] = "Casos de prueba generados correctamente."
 MSG_ENGINE_ERROR: Final[str] = (
@@ -87,19 +82,9 @@ USAGE_OUTPUT: Final[str] = "output_tokens"
 NO_TC_START_DEFAULT: Final[int] = 1
 
 
-def _sum_usage(
-    total: dict[str, int],
-    add: dict[str, int] | None,
-) -> dict[str, int]:
+def _sum_usage(total: dict[str, int], add: dict[str, int] | None) -> dict[str, int]:
     """
     Suma el uso de tokens de manera acumulativa retornando un dict nuevo.
-
-    Args:
-        total: Acumulado actual.
-        add: Incremento a sumar (puede ser None).
-
-    Returns:
-        Diccionario con input_tokens y output_tokens.
     """
     add = add or {}
 
@@ -139,9 +124,12 @@ def _build_user_text(
     )
 
 
-def _error_event(code: str, message: str) -> dict[str, Any]:
+def _error_event(code: str, message: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
     """Construye un evento de error consistente para la UI."""
-    return {"type": EVENT_ERROR, "code": code, "message": message}
+    evt: dict[str, Any] = {"type": EVENT_ERROR, "code": code, "message": message}
+    if extra:
+        evt.update(extra)
+    return evt
 
 
 def _load_prompt_text() -> str:
@@ -168,8 +156,7 @@ def _llm_to_rows(
     """
     Ejecuta el LLM y devuelve filas ADO parseadas.
 
-    Si el output no es parseable, reintenta una vez anexando
-    REPAIR_INSTRUCTIONS.
+    Si el output no es parseable, reintenta una vez anexando REPAIR_INSTRUCTIONS.
 
     Returns:
         Tupla (rows, usage_total).
@@ -206,21 +193,47 @@ def _llm_to_rows(
     return rows2, usage_total
 
 
+def _filter_blocks_by_selection(
+    blocks: list[Any],
+    selected_requirements: list[int] | None,
+) -> tuple[list[Any], list[int], list[int] | None]:
+    """
+    Filtra blocks por selection (si aplica).
+
+    Returns:
+        (filtered_blocks, missing_selected, selected_sorted_or_none)
+    """
+    if not selected_requirements:
+        return blocks, [], None
+
+    selected_set = {int(n) for n in selected_requirements}
+    selected_sorted = sorted(selected_set)
+
+    available = {int(getattr(b, "requirement_number", -1)) for b in blocks}
+    missing = sorted(selected_set - available)
+
+    filtered = [
+        b for b in blocks
+        if int(getattr(b, "requirement_number", -1)) in selected_set
+    ]
+
+    return filtered, missing, selected_sorted
+
+
 def iter_generation_events(
     *,
     filename: str,
     file_bytes: bytes,
     assigned_to: str,
+    selected_requirements: list[int] | None = None,
 ) -> Iterator[dict[str, Any]]:
     """
     Fuente única de verdad para la generación de casos de prueba.
 
     Eventos emitidos:
-    - {"type":"meta","total_blocks":N}
-    - {"type":"progress","done":i,"total":N,"req":<int>,"scenario":<str>,
-       "secs":<float>}
-    - {"type":"done","ok":True,"download_filename":...,"csv_body":...,
-       "usage":...,"elapsed":...,"stats":...}
+    - {"type":"meta","total_blocks":N,...}
+    - {"type":"progress","done":i,"total":N,"req":<int>,"scenario":<str>,"secs":<float>}
+    - {"type":"done","ok":True,"download_filename":...,"csv_body":...,"usage":...,"elapsed":...,"stats":...}
     - {"type":"error","code":"...","message":"..."}
     """
     start_all = time.perf_counter()
@@ -238,16 +251,29 @@ def iter_generation_events(
 
         doc_text = extract_text_from_upload(filename, file_bytes)
 
+        # ✅ Importante: fallback por filename para NSC.* / naming estándar
         project_id = extract_project_id(doc_text, filename=filename)
         if not project_id:
             yield _error_event(ERR_NO_PROJECT_ID, MSG_NO_PROJECT_ID)
             return
 
         seg = segment_requirements_flexible(doc_text, project_id=project_id)
-
         blocks = seg.blocks
         if not blocks:
             yield _error_event(ERR_NO_REQS, MSG_NO_REQS)
+            return
+
+        # ✅ Filtrar por selección (si aplica)
+        blocks, missing_selected, selected_sorted = _filter_blocks_by_selection(
+            blocks,
+            selected_requirements=selected_requirements,
+        )
+        if not blocks:
+            yield _error_event(
+                ERR_NO_SELECTED_REQS,
+                MSG_NO_SELECTED_REQS,
+                extra={"missing_selected": missing_selected, "selected_requirements": selected_sorted},
+            )
             return
 
         context_pack = build_context_pack(seg.context_text)
@@ -257,15 +283,20 @@ def iter_generation_events(
             "type": EVENT_META,
             "total_blocks": total,
             "segmentation_method": seg.method,
+            "selected_requirements": selected_sorted,
+            "missing_selected": missing_selected,
         }
 
         for idx, block in enumerate(blocks, start=1):
             t0 = time.perf_counter()
 
+            req_num = int(block.requirement_number)
+            scenario = (block.scenario_name or "").strip()
+
             user_text = _build_user_text(
                 project_id=project_id,
-                req_num=block.requirement_number,
-                scenario_name=block.scenario_name,
+                req_num=req_num,
+                scenario_name=scenario,
                 no_tc_start=NO_TC_START_DEFAULT,
                 global_context=context_pack,
                 input_text=block.input_text,
@@ -281,7 +312,7 @@ def iter_generation_events(
             rows, _ = enforce_structure_and_titles(
                 rows,
                 project_id=project_id,
-                requirement_number=block.requirement_number,
+                requirement_number=req_num,
                 tc_start=NO_TC_START_DEFAULT,
                 state="Design",
                 area_path=project_id,
@@ -297,8 +328,8 @@ def iter_generation_events(
                 "type": EVENT_PROGRESS,
                 "done": idx,
                 "total": total,
-                "req": block.requirement_number,
-                "scenario": block.scenario_name,
+                "req": req_num,
+                "scenario": scenario,
                 "secs": round(secs, 2),
             }
 

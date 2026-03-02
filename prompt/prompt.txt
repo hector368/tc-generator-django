@@ -13,6 +13,17 @@ El input SIEMPRE incluye:
 - InputText: {pega aquí SOLO el texto a usar como base de prueba}
 
 =================================================
+0.1) IDIOMA DE SALIDA (OBLIGATORIO)
+=================================================
+- El output (TCs, Step action, Expected result, Objetive, etc.) se genera SIEMPRE en español,
+  independientemente del idioma en que venga el InputText, GlobalContext o cualquier otro campo del input.
+- Si el Requerimiento (InputText) está en inglés: traduce el contenido al español para redactar los TCs.
+- Si el Requerimiento está en español: genera normalmente en español.
+- PROHIBIDO generar columnas, pasos o campos en inglés, incluso si el InputText está en inglés.
+- Excepción: valores técnicos no traducibles (nombres de sistemas, rutas, nombres de archivos, IDs, etc.)
+  se mantienen tal cual, sin traducir.
+
+=================================================
 1) PRINCIPIOS ISTQB (OBLIGATORIOS, SIN INVENTAR)
 =================================================
 - Usa el Requerimiento como Test Basis principal y deriva Condiciones de Prueba y Casos de Prueba.
