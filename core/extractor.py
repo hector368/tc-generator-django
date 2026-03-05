@@ -36,11 +36,9 @@ DOCX_EXT: Final[str] = ".docx"
 TABLE_CELL_SEP: Final[str] = " "
 
 
+# Normaliza artefactos de extracción para mejorar búsquedas y regex fiables.
 def _clean_text(text: str) -> str:
     """
-    Normaliza artefactos comunes de extraccion para mejorar la
-    confiabilidad de busquedas y regex.
-
     Args:
         text: Texto crudo extraido de documento
 
@@ -64,10 +62,9 @@ def _clean_text(text: str) -> str:
     return "\n".join([ln for ln in lines if ln]).strip()
 
 
+# Itera bloques (parrafos y tablas) en el orden real del documento.
 def _iter_docx_blocks(doc: Document):
     """
-    Itera bloques (parrafos y tablas) en el orden real del documento.
-
     Args:
         doc: Documento DOCX cargado
 
@@ -82,10 +79,9 @@ def _iter_docx_blocks(doc: Document):
             yield Table(child, doc)
 
 
+# Extrae texto de PDF o DOCX.
 def extract_text_from_upload(filename: str, file_bytes: bytes) -> str:
     """
-    Extrae texto de PDF o DOCX.
-
     Reglas:
     - PDF: se lee pagina por pagina preservando el orden
     - DOCX: se extrae respetando el orden real (parrafos y tablas)

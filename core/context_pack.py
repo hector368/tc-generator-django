@@ -60,10 +60,9 @@ MAX_LOOKUP_FORMAT_LINES: Final[int] = 30
 MAX_LIST_ITEMS: Final[int] = 12
 
 
+# Normaliza saltos de linea y elimina caracteres invisibles.
 def _normalize(text: str) -> str:
     """
-    Normaliza saltos de linea y elimina caracteres invisibles.
-
     Args:
         text: Texto a normalizar
 
@@ -75,13 +74,12 @@ def _normalize(text: str) -> str:
     return normalized
 
 
+# Divide lineas muy largas para mejorar legibilidad en el contexto.
 def _split_long_line(
     line: str,
     max_len: int = MAX_LONG_LINE_SPLIT
 ) -> list[str]:
     """
-    Divide lineas muy largas para mejorar legibilidad en el contexto.
-
     Se intenta dividir por limites de oracion y, si no es posible,
     se hace un corte duro por longitud.
 
@@ -128,10 +126,9 @@ def _split_long_line(
     return [item for item in out if item]
 
 
+# Extrae coincidencias del grupo 1 de un patron regex.
 def _collect_matches(pattern: re.Pattern[str], text: str) -> list[str]:
     """
-    Extrae coincidencias del grupo 1 de un patron regex.
-
     Args:
         pattern: Patron de expresion regular
         text: Texto donde buscar
@@ -147,10 +144,9 @@ def _collect_matches(pattern: re.Pattern[str], text: str) -> list[str]:
     return items
 
 
+# Elimina duplicados manteniendo el orden de aparicion.
 def _stable_unique(items: list[str]) -> list[str]:
     """
-    Elimina duplicados manteniendo el orden de aparicion.
-
     Args:
         items: Lista con posibles duplicados
 
@@ -160,6 +156,7 @@ def _stable_unique(items: list[str]) -> list[str]:
     return list(dict.fromkeys(items))
 
 
+# Construye un contexto global determinista a partir del TO-BE.
 def build_context_pack(
     to_be_text: str,
     *,
@@ -167,9 +164,6 @@ def build_context_pack(
     max_lines: int = DEFAULT_MAX_LINES,
 ) -> str:
     """
-    Construye un contexto global determinista (sin LLM) a partir del
-    TO-BE.
-
     Objetivo:
     - Compartir sistemas, artefactos, formatos y notas repetidas
     - Evitar contaminar con reglas especificas de un bloque

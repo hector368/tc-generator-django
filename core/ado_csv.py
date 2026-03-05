@@ -55,7 +55,7 @@ LIMIT_REACHED_MARKERS: Final[tuple[str, ...]] = (
 BULLET_SEP: Final[str] = " • "
 
 # Valores permitidos/esperados (defensivo ante salidas del LLM)
-# Incluye variaciones comunes para soportar corrimientos (Functional/Funcional/Funtional).
+# Incluye variaciones comunes para soportar corrimientos.
 TYPE_TEST_ALIASES: Final[frozenset[str]] = frozenset(
     {
         "functional",
@@ -70,18 +70,17 @@ TYPE_TEST_ALIASES: Final[frozenset[str]] = frozenset(
 )
 PRIORITY_ALLOWED: Final[frozenset[str]] = frozenset({"1", "2", "3"})
 
-# Objetive: compatibilidad con estilo viejo ("Que el bot ...") y nuevo (infinitivo).
+# Objetive: compatibilidad con estilo viejo infinitivo.
 _OBJETIVE_START_RE: Final[re.Pattern[str]] = re.compile(
     r"^\s*(?:no\s+)?(?:que el bot\b|[a-záéíóúñü]+(?:ar|er|ir)\b)",
     re.IGNORECASE,
 )
 
 
+# Heurística para detectar si un texto parece un Objetive
 def _looks_like_objetive(text: str) -> bool:
     """
-    Heurística para detectar si un texto parece un Objetive:
-    - "Que el bot ..." (legado)
-    - Verbo en infinitivo (Validar/Verificar/Registrar/Manejar/Notificar..., etc.)
+    Verbo en infinitivo
     """
     s = (text or "").strip()
     if not s:
@@ -89,10 +88,10 @@ def _looks_like_objetive(text: str) -> bool:
     return bool(_OBJETIVE_START_RE.match(s))
 
 
+
+# Convierte saltos de linea en separador inline para no romper el CSV.
 def _one_line_with_bullets(text: str) -> str:
     """
-    Convierte saltos de linea en separador inline para no romper el CSV.
-
     Args:
         text: Texto con posibles saltos de linea
 
@@ -107,10 +106,9 @@ def _one_line_with_bullets(text: str) -> str:
     return s
 
 
+# Normaliza la lista de objetivos omitidos para la fila final Limit reached.
 def _sanitize_omitted_objectives(text: str) -> str:
     """
-    Normaliza la lista de objetivos omitidos para la fila final Limit reached.
-
     Reglas:
     - Una sola linea (sin saltos de linea)
     - Cada objetivo separado por bullet
@@ -137,11 +135,9 @@ def _sanitize_omitted_objectives(text: str) -> str:
     return BULLET_SEP + BULLET_SEP.join(items)
 
 
+#Asegura que el encabezado del CSV de ADO exista en la primera linea.
 def ensure_csv_header(csv_body: str) -> str:
     """
-    Asegura que el encabezado del CSV de Azure DevOps exista en la primera
-    linea.
-
     Si el cuerpo esta vacio, retorna unicamente el encabezado.
     Si el primer renglon ya corresponde al encabezado, retorna el cuerpo
     intacto.
@@ -167,10 +163,9 @@ def ensure_csv_header(csv_body: str) -> str:
     return f"{ADO_CSV_HEADER}\n{body}"
 
 
+# Determina si la fila corresponde al encabezado de ADO.
 def is_header_row(row: list[str]) -> bool:
     """
-    Determina si la fila corresponde al encabezado de ADO.
-
     Args:
         row: Lista de valores de una fila CSV
 
@@ -186,11 +181,9 @@ def is_header_row(row: list[str]) -> bool:
     return c0 == "ID" and c1 == "WorkItemType"
 
 
+# Valida y normaliza que una fila tenga el numero de columnas esperado por ADO.
 def _ensure_ncols(row: list[str]) -> list[str]:
     """
-    Valida y normaliza que una fila tenga el numero de columnas esperado
-    por ADO.
-
     Reglas:
     - Si trae columnas extra vacias (trailing comma), recorta
     - Si trae menos columnas, rellena con strings vacios
@@ -215,12 +208,8 @@ def _ensure_ncols(row: list[str]) -> list[str]:
     return cleaned
 
 
+# Omite filas vacias y omite la fila de encabezado si viene incluida.
 def parse_ado_rows(csv_text: str) -> list[list[str]]:
-    """
-    Parsea texto CSV a filas ADO (sin encabezado).
-
-    Omite filas vacias y omite la fila de encabezado si viene incluida.
-    """
     txt = (csv_text or "").lstrip(BOM).strip()
     if not txt:
         return []
@@ -242,10 +231,9 @@ def parse_ado_rows(csv_text: str) -> list[list[str]]:
     return rows
 
 
+# Reescribe CSV con comillas correctas para evitar comas accidentales.
 def dump_ado_rows(rows: list[list[str]]) -> str:
     """
-    Reescribe CSV con comillas correctas para evitar comas accidentales.
-
     Retorna el CSV sin encabezado y sin lineas finales extra.
     """
     buf = io.StringIO()
@@ -267,10 +255,9 @@ def dump_ado_rows(rows: list[list[str]]) -> str:
     return buf.getvalue().strip()
 
 
+# Determina si la fila debe considerarse como inicio de un Test Case.
 def is_tc_start(row: list[str]) -> bool:
     """
-    Determina si la fila debe considerarse como inicio de un Test Case.
-
     Logica:
     - Inicia si 'Work Item Type' es 'Test Case' (case-insensitive).
     - Inicia si existe un 'Title' no vacio Y no es una fila de paso
@@ -283,10 +270,8 @@ def is_tc_start(row: list[str]) -> bool:
     return work_item == "test case" or (bool(title) and not test_step)
 
 
+# Sanitiza precondiciones para evitar saltos de linea que rompan el CSV.
 def _sanitize_preconditions(text: str) -> str:
-    """
-    Sanitiza precondiciones para evitar saltos de linea que rompan el CSV.
-    """
     s = (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
     if not s:
         return ""
@@ -295,6 +280,7 @@ def _sanitize_preconditions(text: str) -> str:
     return s
 
 
+# Normaliza filas a una estructura ADO consistente.
 def enforce_structure_and_titles(
     rows: list[list[str]],
     *,
@@ -305,9 +291,6 @@ def enforce_structure_and_titles(
     area_path: str | None = None,
     assigned_to: str = "",
 ) -> tuple[list[list[str]], int]:
-    """
-    Normaliza filas a una estructura ADO consistente.
-    """
     # Indices de columnas ADO
     IDX_ID = 0
     IDX_WORK_ITEM = 1
@@ -325,10 +308,11 @@ def enforce_structure_and_titles(
     IDX_AREA = 13
     IDX_ASSIGNED = 14
 
+    # Cuenta cuántos objetivos “omitidos”  en la columna Objetive.
     def _count_omitted_objectives(obj_text: str) -> int:
         """
         Heurística: el Limit row nuevo trae una lista en Objetive con bullets.
-        Si hay >=2 bullets y al menos uno parece un objetivo (infinitivo o "Que el bot"),
+        Si hay >=2 bullets y al menos uno parece un objetivo
         lo tratamos como "limit-like".
         """
         s = (obj_text or "").strip()
@@ -360,7 +344,6 @@ def enforce_structure_and_titles(
     for row in rows:
         row = _ensure_ncols(row)
 
-        # Si ya emitimos la fila final "Limit reached", ignoramos todo lo que venga despues.
         if limit_emitted:
             continue
 
@@ -395,11 +378,6 @@ def enforce_structure_and_titles(
             # Sanitiza Preconditions (una sola linea)
             preconditions_text = row[IDX_PRECONDITIONS]
             row[IDX_PRECONDITIONS] = _sanitize_preconditions(preconditions_text)
-
-            # Reparación defensiva: corrimiento de columnas en metadata.
-            #
-            # Caso observado: el LLM duplica "Functional/Funcional" en Priority y desplaza:
-            # Priority(1/2/3) -> Expected result -> Objetive -> Operating Scenario
             prio_raw = (row[IDX_PRIORITY] or "").strip().lower()
             expected_maybe_priority = (row[IDX_EXPECTED_RESULT] or "").strip()
             objetive_maybe_expected = (row[IDX_OBJETIVE] or "").strip()

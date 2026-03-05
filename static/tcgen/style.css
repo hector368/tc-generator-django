@@ -287,8 +287,6 @@ a:hover{
   border:1.8px solid var(--border);
 
   transition:transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
-
-  /* NUEVO: layout */
   display:flex;
   align-items:center;
   gap:14px;
@@ -325,7 +323,6 @@ a:hover{
   position: relative;
   padding: 14px;
   border-radius: 18px;
-  /* ✅ Usa border SOLID para que el borde gradiente funcione bien */
   border: 1.6px solid transparent;
   /* normaliza estilos por defecto del button */
   appearance: none;

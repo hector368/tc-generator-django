@@ -29,18 +29,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const mReq = document.getElementById("mReq");
   const mTc = document.getElementById("mTc");
   const mNot = document.getElementById("mNot");
-
-  // (si tu template todavía trae límite)
+  const mCost = document.getElementById("mCost");
   const mLimit = document.getElementById("mLimit");
   const limitDetail = document.getElementById("limitDetail");
   const limitDetailList = document.getElementById("limitDetailList");
-
   const uploader = document.querySelector(".uploader");
-
-  // ✅ NUEVO: Assigned To + métrica Area Path
+  // Assigned To + métrica Area Path
   const assignedInput = document.getElementById("id_assigned_to");
   const mArea = document.getElementById("mArea");
-// ✅ NUEVO: Preview de requerimientos (resumen)
+// Preview de requerimientos (resumen)
   const reqPreview = document.getElementById("reqPreview");
   const reqPid = document.getElementById("reqPid");
   const reqCount = document.getElementById("reqCount");
@@ -143,6 +140,28 @@ function updateSelectedBadgeCount(preview) {
   function bytesToMB(bytes) {
     return (bytes / (1024 * 1024)).toFixed(2);
   }
+  // Pricing default (USD por 1M tokens). Ajusta aquí si cambias de modelo.
+const PRICING_USD_PER_MTOK = {
+  input: 3.0,   // $3 / MTok
+  output: 15.0, // $15 / MTok
+};
+
+function computeTotalCostUsd(inputTokens, outputTokens) {
+  const inTok = Number(inputTokens) || 0;
+  const outTok = Number(outputTokens) || 0;
+
+  const inCost = (inTok / 1_000_000) * PRICING_USD_PER_MTOK.input;
+  const outCost = (outTok / 1_000_000) * PRICING_USD_PER_MTOK.output;
+
+  return inCost + outCost;
+}
+
+function formatUsd(v) {
+  const n = Number(v) || 0;
+  if (n === 0) return "$0.00";
+  if (n < 1) return `$${n.toFixed(4)}`;   // para costos pequeños (ej. $0.0262)
+  return `$${n.toFixed(2)}`;
+}
 
   function show(el) { if (el) el.style.display = "block"; }
   function hide(el) { if (el) el.style.display = "none"; }
@@ -185,7 +204,6 @@ function renderReqPreview(preview) {
   reqPreview.hidden = false;
   if (reqPreviewBtn) reqPreviewBtn.disabled = reqs.length === 0;
 
-  // ✅ Actualiza "Selected" en la card (null => todos)
   updateSelectedBadgeCount(preview);
 }
 
@@ -470,6 +488,7 @@ function cleanRequirementTitle(title, number) {
     if (mTc) mTc.textContent = "0";
     if (mNot) mNot.textContent = "0";
     if (mArea) mArea.textContent = "-";
+    if (mCost) mCost.textContent = "$0.00";
 
     // Si todavía existe la UI de límite, mantenerla en cero y oculta
     if (mLimit) mLimit.textContent = "0";
@@ -503,9 +522,8 @@ function cleanRequirementTitle(title, number) {
     if (fileInput) fileInput.value = "";
     setFileSelectedUI(null);
     resetUIForNewRun();
-    clearReqPreview(); // ✅ NUEVO
+    clearReqPreview(); 
   }
-
   async function downloadCsvNoReload(downloadUrl) {
     const resp = await fetch(downloadUrl, {
       method: "GET",
@@ -546,20 +564,26 @@ function cleanRequirementTitle(title, number) {
     window.URL.revokeObjectURL(url);
   }
 
-  function applyDoneUI(data) {
-    if (readyFilename) readyFilename.textContent = data.filename || "TC.csv";
+function applyDoneUI(data) {
+  if (readyFilename) readyFilename.textContent = data.filename || "TC.csv";
 
-    if (mInput) mInput.textContent = String(data.usage?.input_tokens ?? 0);
-    if (mOutput) mOutput.textContent = String(data.usage?.output_tokens ?? 0);
-    if (mTime) mTime.textContent = String(data.elapsed ?? 0);
+  const inTok = Number(data.usage?.input_tokens ?? 0);
+  const outTok = Number(data.usage?.output_tokens ?? 0);
 
-    const stats = data.stats || {};
-    if (mReq) mReq.textContent = String(stats.requirements_total ?? 0);
-    if (mTc) mTc.textContent = String(stats.test_cases_total ?? 0);
-    if (mNot) mNot.textContent = String(stats.requirements_not_testable ?? 0);
+  if (mInput) mInput.textContent = String(inTok);
+  if (mOutput) mOutput.textContent = String(outTok);
+  if (mTime) mTime.textContent = String(data.elapsed ?? 0);
 
-    // ✅ Area Path = Project ID (según tu backend)
-    if (mArea) mArea.textContent = String(stats.area_path ?? stats.project_id ?? "-");
+  //  costo total
+  const totalCost = computeTotalCostUsd(inTok, outTok);
+  if (mCost) mCost.textContent = formatUsd(totalCost);
+
+  const stats = data.stats || {};
+  if (mReq) mReq.textContent = String(stats.requirements_total ?? 0);
+  if (mTc) mTc.textContent = String(stats.test_cases_total ?? 0);
+  if (mNot) mNot.textContent = String(stats.requirements_not_testable ?? 0);
+
+  if (mArea) mArea.textContent = String(stats.area_path ?? stats.project_id ?? "-");
 
     // Si existe UI de límite (hoy siempre será 0)
     if (mLimit) mLimit.textContent = String(stats.requirements_limit_reached_total ?? 0);
@@ -714,7 +738,7 @@ if (readyCard) show(readyCard);
     setFileSelectedUI(selectedFile);
     resetUIForNewRun();
 
-    // ✅ NUEVO: analizar y mostrar lista de requerimientos
+    // Analizar y mostrar lista de requerimientos
     clearReqPreview();
     if (selectedFile) analyzeDocument(selectedFile);
   }
@@ -793,15 +817,11 @@ if (readyCard) show(readyCard);
 
       try {
         const csrf = getCookie("csrftoken");
-
-        // ✅ Importante: garantizamos que "document" sea el archivo seleccionado,
-        // incluso si fue drag&drop y fileInput.files no se actualizó.
         const fd = new FormData(form);
         fd.set("document", selectedFile, selectedFile.name);
 
         // (assigned_to ya viene en el form, pero lo dejamos explícito por claridad)
         fd.set("assigned_to", assignedTo);
-        // ✅ Enviar selección de requerimientos (si aplica)
         const sel = (selectedRequirementsInput?.value || "").trim();
         if (sel) {
           fd.set("selected_requirements", sel);   // ej. "7,10,11"

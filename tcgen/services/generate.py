@@ -18,10 +18,9 @@ ERR_DEFAULT_MESSAGE: Final[str] = "Generation failed."
 
 
 @dataclass(frozen=True)
+# Resultado de una ejecución sincrónica de generación.
 class GenerationResult:
     """
-    Resultado de una ejecución sincrónica de generación.
-
     Nota:
         csv_out contiene únicamente el cuerpo del CSV, sin encabezado.
         El encabezado se asegura en otra capa del servicio.
@@ -34,6 +33,7 @@ class GenerationResult:
     download_filename: str
 
 
+# Consume el motor de eventos y devuelve el último evento final.
 def generate_test_cases_sync(
     *,
     filename: str,
@@ -41,10 +41,7 @@ def generate_test_cases_sync(
     assigned_to: str,
 ) -> GenerationResult:
     """
-    Consume el motor de eventos y devuelve el último evento final.
-
-    Raises:
-        ValueError: Si se recibe un evento de error o si no existe un evento final.
+    Si se recibe un evento de error o si no existe un evento final.
     """
     last_done: dict[str, Any] | None = None
 

@@ -1,17 +1,9 @@
 """
-Módulo de cálculo de métricas a partir del CSV final de ADO.
+Modulo de calculo de metricas a partir del CSV final de ADO.
 
-Este módulo analiza el CSV generado para extraer métricas sobre
-requerimientos, test cases y otros indicadores de calidad.
-
-Responsabilidades:
-- Contar requerimientos detectados en el CSV
-- Contar test cases generados exitosamente
-- Identificar requerimientos no testeables
-- Detectar requerimientos con límite alcanzado (Limit reached)
-- Extraer detalles de objetivos omitidos (lista de bullets)
-
-Nota: No modifica el CSV, solo lo analiza para métricas de UI.
+Este modulo analiza el CSV generado para extraer indicadores sobre
+requerimientos, casos de prueba y condiciones especiales detectadas
+durante la generacion. No modifica el contenido del CSV.
 """
 
 from __future__ import annotations
@@ -47,28 +39,26 @@ LIMIT_REACHED_LEGACY_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Objetivos: compatibilidad con estilo viejo ("Que el bot ...")
-# y nuevo (verbo en infinitivo: Validar/Verificar/Registrar/Manejar..., etc.)
-# También permite opcional "No ..." al inicio.
+# Patron para verificar que un texto inicia con verbo en infinitivo
+# o con la expresion negativa equivalente, indicando que es un objetivo.
 _OBJETIVE_START_RE = re.compile(
     r"^\s*(?:no\s+)?(?:que el bot\b|[a-záéíóúñü]+(?:ar|er|ir)\b)",
     re.IGNORECASE,
 )
 
 
+# Determina si un texto tiene la forma de un objetivo de caso de prueba.
 def _looks_like_objetive(text: str) -> bool:
     """
-    Heurística para detectar si un texto "parece" un objetivo:
-
-    - Formato anterior: inicia con "Que el bot ..."
-    - Formato nuevo: inicia con verbo en infinitivo (termina en ar/er/ir)
-    - Permite "No ..." como negación al inicio
+    Aplica una heuristica basada en el inicio del texto: se considera
+    objetivo cuando comienza con un verbo en infinitivo o con su
+    equivalente negativo.
 
     Args:
-        text: texto a evaluar
+        text: Texto a evaluar.
 
     Returns:
-        True si parece objetivo, False si no.
+        True si el texto parece un objetivo, False en caso contrario.
     """
     s = (text or "").strip()
     if not s:
@@ -76,20 +66,18 @@ def _looks_like_objetive(text: str) -> bool:
     return bool(_OBJETIVE_START_RE.match(s))
 
 
+# Extrae los items de una celda que contiene una lista con bullets.
 def _extract_bullets(obj: str) -> list[str]:
     """
-    Extrae items tipo bullet en una sola celda.
-
-    Regla:
-    - Los objetivos omitidos en Limit reached vienen como lista en Objetive
-      con "•" (o caracteres similares).
-    - Devuelve items limpios, sin el marcador.
+    Normaliza los distintos caracteres de bullet que pueden aparecer
+    segun el formato del documento y devuelve cada item limpio como
+    elemento de la lista resultante.
 
     Args:
-        obj: Texto con bullets a extraer
+        obj: Texto de la celda con los items separados por bullets.
 
     Returns:
-        Lista de items separados por bullets
+        Lista de items limpios extraidos del texto.
     """
     s = (obj or "").replace("\r\n", " ")
     s = s.replace("\r", " ").replace("\n", " ").strip()
@@ -99,15 +87,19 @@ def _extract_bullets(obj: str) -> list[str]:
     return [x.strip() for x in re.split(r"\s*•\s*", s) if x.strip()]
 
 
+# Extrae el numero de caso de prueba a partir del titulo de la fila.
 def _tc_num_from_title(title: str) -> int | None:
     """
-    Extrae el número de TC (último bloque XXX) desde Title.
+    El numero corresponde al ultimo segmento del titulo cuando tiene
+    exactamente tres digitos. Si el titulo no sigue la estructura
+    esperada, retorna None.
 
     Args:
-        title: Título del test case (formato: PROJECT.REQ.TC)
+        title: Texto del titulo del caso de prueba.
 
     Returns:
-        Número de TC o None si no se puede extraer.
+        Numero de caso de prueba como entero, o None si no se puede
+        extraer.
     """
     if not title:
         return None
@@ -125,23 +117,21 @@ def _tc_num_from_title(title: str) -> int | None:
         return None
 
 
+# Detecta filas de CSV tipo "límite alcanzado" y extrae detalles si aplica.
 def _is_limit_row(row: list[str]) -> tuple[bool, dict[str, Any]]:
     """
-    Detecta si la fila es la fila final de Limit reached.
-
-    Nuevo formato (backend actual):
-    - Test Step vacío (fila metadata)
-    - Expected result == "(Limit reached)"
-    - Objetive contiene lista con bullets
-
-    Legado:
-    - Step action inicia con "(Limit reached): Generated X of Y identified ..."
+    Evalua tres variantes en orden de prioridad: el formato actual del
+    backend con marca exacta en el resultado esperado, el formato legado
+    con la marca en el campo de accion, y un fallback para casos donde
+    el modelo omite la marca pero deja la lista de objetivos.
 
     Args:
-        row: fila CSV a evaluar
+        row: Fila del CSV normalizada a quince columnas.
 
     Returns:
-        Tupla (es_limit_row, diccionario_con_detalles)
+        Tupla con un booleano que indica si es fila de limite y un
+        diccionario con los detalles extraidos. El diccionario esta
+        vacio cuando no se detecta la condicion.
     """
     step_action = (row[IDX_STEP_ACTION] or "").strip()
     expected_result = (row[IDX_EXPECTED_RESULT] or "").strip()
@@ -151,11 +141,13 @@ def _is_limit_row(row: list[str]) -> tuple[bool, dict[str, Any]]:
 
     tc_num = _tc_num_from_title(title)
 
-    # 1) Nuevo formato: marca EXACTA en Expected result y metadata (Test Step vacío)
+    # Formato actual: marca exacta en resultado esperado y fila de
+    # metadata con Test Step vacio.
     if test_step == "" and expected_result == LIMIT_REACHED_MARK:
         bullets_all = _extract_bullets(obj)
         bullets = [b for b in bullets_all if _looks_like_objetive(b)]
-        # Si no detecta objetivos por heurística, usa lo que haya (evita perder info)
+        # Cuando la heuristica no identifica objetivos se usan todos
+        # los bullets para no perder informacion.
         used = bullets if bullets else bullets_all
 
         return True, {
@@ -165,7 +157,7 @@ def _is_limit_row(row: list[str]) -> tuple[bool, dict[str, Any]]:
             "omitted_objectives": used[:50],
         }
 
-    # 2) Legado
+    # Formato legado: la marca aparece al inicio del campo de accion.
     if step_action.startswith(LIMIT_REACHED_LEGACY_PREFIX):
         m = LIMIT_REACHED_LEGACY_RE.search(step_action)
         if m:
@@ -184,11 +176,9 @@ def _is_limit_row(row: list[str]) -> tuple[bool, dict[str, Any]]:
             "omitted_objectives": None,
         }
 
-    # 3) Fallback: si el modelo olvida "(Limit reached)" pero deja lista en Objetive
-    # Solo si:
-    # - metadata (Test Step vacío)
-    # - TC >= 11
-    # - Objetive tiene >=2 bullets que parezcan objetivos
+    # Fallback para casos donde el modelo omite la marca de limite pero
+    # deja la lista de objetivos en la celda. Se activa unicamente en
+    # filas de metadata con numero de TC alto y suficientes bullets.
     if test_step == "" and (tc_num is not None and tc_num >= 11):
         bullets_all = _extract_bullets(obj)
         bullets = [b for b in bullets_all if _looks_like_objetive(b)]
@@ -203,22 +193,21 @@ def _is_limit_row(row: list[str]) -> tuple[bool, dict[str, Any]]:
     return False, {}
 
 
+# Calcula las metricas completas del CSV de casos de prueba.
 def compute_csv_stats(csv_text: str) -> dict[str, Any]:
     """
-    Calcula métricas completas del CSV de test cases.
+    Recorre todas las filas del CSV identificando requerimientos,
+    casos de prueba, condiciones no testeables y limites alcanzados.
+    Normaliza cada fila a quince columnas antes de procesarla y
+    omite la fila de encabezado estandar de ADO si esta presente.
 
     Args:
-        csv_text: contenido completo del CSV
+        csv_text: Contenido completo del CSV a analizar.
 
     Returns:
-        Diccionario con métricas:
-        - requirements_total
-        - test_cases_total
-        - requirements_not_testable
-        - requirements_not_testable_list
-        - requirements_limit_reached_total
-        - requirements_limit_reached_list
-        - requirements_limit_reached_detail
+        Diccionario con los conteos e identificadores de requerimientos
+        totales, casos de prueba generados, requerimientos no testeables
+        y requerimientos con limite alcanzado junto con su detalle.
     """
     txt = (csv_text or "").lstrip("\ufeff").strip()
     if not txt:
@@ -246,7 +235,7 @@ def compute_csv_stats(csv_text: str) -> dict[str, Any]:
         if not row:
             continue
 
-        # Detecta header estándar ADO
+        # Omite la fila de encabezado estandar de ADO.
         is_header = (
             len(row) >= 2
             and row[0].strip() == "ID"
@@ -255,7 +244,7 @@ def compute_csv_stats(csv_text: str) -> dict[str, Any]:
         if is_header:
             continue
 
-        # Normaliza a 15 columnas
+        # Normaliza la fila a quince columnas antes de acceder a indices.
         if len(row) < ADO_NCOLS:
             row = row + [""] * (ADO_NCOLS - len(row))
         elif len(row) > ADO_NCOLS:
@@ -265,7 +254,8 @@ def compute_csv_stats(csv_text: str) -> dict[str, Any]:
         title = (row[IDX_TITLE] or "").strip()
         expected_result = (row[IDX_EXPECTED_RESULT] or "").strip()
 
-        # Detecta requirement desde Title (PROJECT.REQ.TC)
+        # Extrae el numero de requerimiento desde el titulo cuando
+        # los dos ultimos segmentos tienen tres digitos.
         if title:
             parts = [p.strip() for p in title.split(".") if p.strip()]
             has_req_and_tc = (
@@ -279,7 +269,8 @@ def compute_csv_stats(csv_text: str) -> dict[str, Any]:
         if current_req:
             requirements.add(current_req)
 
-        # Detecta limit row
+        # Registra el requerimiento como limite alcanzado cuando la
+        # fila cumple los criterios de deteccion.
         is_limit, info = _is_limit_row(row)
         if is_limit and current_req:
             limit_reached.add(current_req)
@@ -291,12 +282,14 @@ def compute_csv_stats(csv_text: str) -> dict[str, Any]:
                 "omitted_objectives": info.get("omitted_objectives"),
             }
 
-        # Cuenta TCs (solo filas metadata de TC; excluye limit row)
+        # Cuenta solo filas de metadata de caso de prueba que no sean
+        # de limite alcanzado.
         if work_item_type.lower() == "test case":
             if not is_limit:
                 test_cases_total += 1
 
-            # Not testable (en metadata row típicamente)
+            # Marca el requerimiento como no testeable cuando el campo
+            # de resultado esperado contiene el prefijo correspondiente.
             if current_req and expected_result.startswith(NO_TESTEABLE_PREFIX):
                 not_testable.add(current_req)
 

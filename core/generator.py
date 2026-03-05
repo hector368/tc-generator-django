@@ -26,10 +26,9 @@ _CSV_DELIMITER = ","
 _CSV_QUOTECHAR = '"'
 
 
+# Normaliza un encabezado para comparaciones tolerando espacios.
 def _normalize_header(header: str) -> str:
     """
-    Normaliza un encabezado para comparaciones tolerando espacios.
-
     Ejemplo:
     - "ID, Work Item Type" vs "ID,Work Item Type"
 
@@ -42,10 +41,9 @@ def _normalize_header(header: str) -> str:
     return (header or "").replace(" ", "").strip()
 
 
+# Elimina fences tipo ``` o ```csv si el modelo envolvio la respuesta.
 def _strip_code_fences(text: str) -> str:
     """
-    Elimina fences tipo ``` o ```csv si el modelo envolvio la respuesta.
-
     Si no hay fences, retorna el texto sin cambios relevantes.
 
     Args:
@@ -71,10 +69,9 @@ def _strip_code_fences(text: str) -> str:
     return "\n".join(lines).strip()
 
 
+# Valida de forma conservadora si una fila parece una fila ADO.
 def _looks_like_ado_row(row: list[str]) -> bool:
     """
-    Valida de forma conservadora si una fila parece una fila ADO.
-
     Reglas actuales:
     - Debe tener exactamente 15 columnas
     - El primer campo suele ser vacio o "ID" si se colo el header
@@ -92,10 +89,9 @@ def _looks_like_ado_row(row: list[str]) -> bool:
     return first == "" or first.upper() == "ID"
 
 
+# Devuelve unicamente la parte CSV de la salida del modelo.
 def extract_csv_only(text: str) -> str:
     """
-    Devuelve unicamente la parte CSV de la salida del modelo.
-
     Estrategia:
     - Remueve fences ``` si existen
     - Si encuentra el header ADO, recorta desde ahi

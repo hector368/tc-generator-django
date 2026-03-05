@@ -5,12 +5,6 @@ Contiene configuraciones compartidas entre entornos (local y producción).
 """
 import os
 from pathlib import Path
-
-# IDs de Rastreabilidad:
-# - REQ-CONFIG-001: Configuración base del proyecto Django.
-# - REQ-CONFIG-002: Gestión de variables de entorno.
-# - REQ-CONFIG-003: Configuración de seguridad y límites de carga.
-
 # Define el directorio base del proyecto.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -103,7 +97,7 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_MB * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_MB * 1024 * 1024
 
 # Configura parámetros del modelo.
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5-20250929")
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "20000"))
 
 # Define rutas de archivos del proyecto.

@@ -1,16 +1,13 @@
 """
-Vistas HTTP para el generador de casos de prueba (tcgen).
+Vistas HTTP para el generador de casos de prueba.
 
-Este módulo expone:
-- La pantalla principal.
-- La generación sincrónica (fallback).
-- La generación por streaming (NDJSON).
-- La descarga del CSV desde sesión.
-- El análisis del documento (detección de ID + requerimientos) sin ejecutar LLM.
+Este modulo expone la pantalla principal, la generacion sincronica,
+la generacion por streaming, la descarga del CSV desde sesion y el
+analisis del documento sin ejecutar el LLM.
 """
 from __future__ import annotations
 
-# Importaciones de la librería estándar.
+# Importaciones de la libreria estandar.
 import json
 import logging
 import re
@@ -19,7 +16,12 @@ from typing import Any, Final, Iterator
 # Importaciones de terceros (Django).
 from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
-from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
+from django.http import (
+    HttpRequest,
+    HttpResponse,
+    JsonResponse,
+    StreamingHttpResponse,
+)
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
@@ -28,13 +30,11 @@ from core.extractor import SUPPORTED_EXTS, extract_text_from_upload
 from core.requirements_segmenter import segment_requirements_flexible
 from core.requirements_splitter import extract_project_id
 from tcgen.services.orchestrator import iter_stream, run_sync
-from tcgen.utils.validators import validate_extension, validate_prompt_file, validate_size
-
-# IDs de Trazabilidad Técnica:
-# - TCGEN-WEB-020: Vistas HTTP para carga de PDD/FDD, generación y descarga de CSV.
-# - TCGEN-WEB-021: Contrato de eventos NDJSON para progreso en frontend.
-# - TCGEN-WEB-022: Persistencia del último resultado en sesión para descarga posterior.
-# - TCGEN-WEB-023: Análisis previo (ID + requerimientos) sin invocar LLM.
+from tcgen.utils.validators import (
+    validate_extension,
+    validate_prompt_file,
+    validate_size,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,29 +52,61 @@ UI_ERR_EMPTY_OUTPUT: Final[str] = (
     "The generated output is empty. Please try a different document."
 )
 UI_ERR_ENGINE: Final[str] = (
-    "An error occurred while generating test cases. Please check server logs."
+    "An error occurred while generating test cases. "
+    "Please check server logs."
 )
 UI_ERR_ASSIGNED_TO: Final[str] = (
-    "Assigned To is required. Please use the exact display name from Azure DevOps."
+    "Assigned To is required. "
+    "Please use the exact display name from Azure DevOps."
 )
 UI_ERR_ANALYZE: Final[str] = "No se pudo analizar el documento."
 
 
+# Retorna la clave de sesión para almacenar el último resultado de generación.
 def _session_key() -> str:
-    """Obtiene la clave de sesión usada para almacenar el último resultado."""
+    """
+    Returns:
+        Cadena con la clave de sesion configurada o el valor por defecto.
+    """
     return str(getattr(settings, "TCGEN_SESSION_KEY_RESULT", "tcgen_result"))
 
 
+# Construye una respuesta JSON de error con estructura consistente para la UI.
 def _json_error(*, status: int, code: str, message: str) -> JsonResponse:
-    """Construye una respuesta JSON de error consistente para la UI."""
-    return JsonResponse({"ok": False, "code": code, "message": message}, status=status)
-
-
-def _validate_generation_upload(*, filename: str, file_size: int) -> JsonResponse | None:
     """
-    Valida prompt, extensión y tamaño del archivo (para generación).
+    Args:
+        status: Codigo de estado HTTP de la respuesta.
+        code: Identificador del tipo de error.
+        message: Mensaje legible para el usuario.
 
-    Retorna JsonResponse si hay error; retorna None si todo es válido.
+    Returns:
+        JsonResponse con el payload de error y el codigo de estado
+        indicado.
+    """
+    return JsonResponse(
+        {"ok": False, "code": code, "message": message},
+        status=status,
+    )
+
+
+# Valida el archivo subido para el flujo de generacion.
+def _validate_generation_upload(
+    *,
+    filename: str,
+    file_size: int,
+) -> JsonResponse | None:
+    """
+    Verifica que el archivo de prompt sea valido, que la extension
+    del archivo este entre las permitidas y que su tamaño no supere
+    el limite configurado.
+
+    Args:
+        filename: Nombre del archivo subido.
+        file_size: Tamaño del archivo en bytes.
+
+    Returns:
+        JsonResponse con el error si alguna validacion falla, o None
+        si todas las validaciones son exitosas.
     """
     vr = validate_prompt_file(settings.PROMPT_FILE)
     if not vr.ok:
@@ -103,11 +135,23 @@ def _validate_generation_upload(*, filename: str, file_size: int) -> JsonRespons
     return None
 
 
-def _validate_analyze_upload(*, filename: str, file_size: int) -> JsonResponse | None:
+# Valida el archivo subido para el flujo de analisis.
+def _validate_analyze_upload(
+    *,
+    filename: str,
+    file_size: int,
+) -> JsonResponse | None:
     """
-    Valida extensión y tamaño del archivo (para análisis).
+    Verifica extension y tamaño unicamente. El archivo de prompt no
+    se valida porque el analisis no invoca al LLM.
 
-    Nota: aquí NO validamos PROMPT_FILE, porque el análisis no llama al LLM.
+    Args:
+        filename: Nombre del archivo subido.
+        file_size: Tamaño del archivo en bytes.
+
+    Returns:
+        JsonResponse con el error si alguna validacion falla, o None
+        si todas las validaciones son exitosas.
     """
     vr = validate_extension(filename, SUPPORTED_EXTS)
     if not vr.ok:
@@ -128,18 +172,26 @@ def _validate_analyze_upload(*, filename: str, file_size: int) -> JsonResponse |
     return None
 
 
+# Obtiene el archivo subido y valida campos requeridos para la generación.
 def _get_upload_for_generation_or_error(
     request: HttpRequest,
 ) -> tuple[UploadedFile, str, int, str] | JsonResponse:
     """
-    Obtiene el archivo cargado y valida lo esencial para GENERACIÓN.
+    Args:
+        request: Solicitud HTTP con el archivo y los datos del formulario.
 
-    Retorna (uploaded, filename, file_size, assigned_to) si es válido; de lo contrario,
-    retorna una respuesta JsonResponse de error.
+    Returns:
+        Tupla con el archivo subido, el nombre del archivo, el tamaño
+        en bytes y el valor de Assigned To si todo es valido, o
+        JsonResponse de error en caso contrario.
     """
     uploaded = request.FILES.get("document")
     if not uploaded:
-        return _json_error(status=400, code="ERR_NO_FILE", message=UI_ERR_NO_FILE)
+        return _json_error(
+            status=400,
+            code="ERR_NO_FILE",
+            message=UI_ERR_NO_FILE,
+        )
 
     assigned_to = (request.POST.get("assigned_to") or "").strip()
     if not assigned_to:
@@ -152,43 +204,63 @@ def _get_upload_for_generation_or_error(
     filename = uploaded.name or ""
     file_size = int(getattr(uploaded, "size", 0) or 0)
 
-    validation_error = _validate_generation_upload(filename=filename, file_size=file_size)
+    validation_error = _validate_generation_upload(
+        filename=filename,
+        file_size=file_size,
+    )
     if validation_error:
         return validation_error
 
     return uploaded, filename, file_size, assigned_to
 
 
+# Obtiene el archivo subido y valida campos requeridos para el análisis.
 def _get_upload_for_analyze_or_error(
     request: HttpRequest,
 ) -> tuple[UploadedFile, str, int] | JsonResponse:
     """
-    Obtiene el archivo cargado y valida lo esencial para ANÁLISIS.
+    Args:
+        request: Solicitud HTTP con el archivo del formulario.
 
-    Retorna (uploaded, filename, file_size) si es válido; de lo contrario,
-    retorna una respuesta JsonResponse de error.
+    Returns:
+        Tupla con el archivo subido, el nombre del archivo y el tamaño
+        en bytes si todo es valido, o JsonResponse de error en caso
+        contrario.
     """
     uploaded = request.FILES.get("document")
     if not uploaded:
-        return _json_error(status=400, code="ERR_NO_FILE", message=UI_ERR_NO_FILE)
+        return _json_error(
+            status=400,
+            code="ERR_NO_FILE",
+            message=UI_ERR_NO_FILE,
+        )
 
     filename = uploaded.name or ""
     file_size = int(getattr(uploaded, "size", 0) or 0)
 
-    validation_error = _validate_analyze_upload(filename=filename, file_size=file_size)
+    validation_error = _validate_analyze_upload(
+        filename=filename,
+        file_size=file_size,
+    )
     if validation_error:
         return validation_error
 
     return uploaded, filename, file_size
 
 
+# Convierte la selección de requerimientos en una lista ordenada de enteros.
 def _parse_selected_requirements(raw: str | None) -> list[int] | None:
     """
-    Parsea selección de requerimientos desde string:
-    - "7,10,11"
-    - "7 10 11"
-    - "7,10-12"  (soporta rangos)
-    Retorna None si viene vacío => significa "todos".
+    Acepta numeros separados por comas o espacios, y rangos con guion.
+    Retorna None cuando la cadena esta vacia, lo que indica que se
+    deben procesar todos los requerimientos disponibles.
+
+    Args:
+        raw: Cadena con la seleccion de requerimientos del formulario.
+
+    Returns:
+        Lista ordenada de numeros de requerimiento seleccionados, o
+        None si la cadena esta vacia.
     """
     s = (raw or "").strip()
     if not s:
@@ -216,20 +288,22 @@ def _parse_selected_requirements(raw: str | None) -> list[int] | None:
 
 
 @require_http_methods(["GET"])
+# Renderiza la pantalla principal del generador.
 def home(request: HttpRequest) -> HttpResponse:
-    """Renderiza la pantalla principal del generador."""
     return render(request, "tcgen/index.html")
 
 
 @require_http_methods(["POST"])
+# Analiza el documento y retorna el ID del proyecto y requerimientos sin LLM.
 def analyze_document(request: HttpRequest) -> JsonResponse:
     """
-    Analiza el documento (PDD/FDD) y retorna:
-    - project_id detectado (usa filename como fallback)
-    - lista de requerimientos detectados (número + título)
-    - método de segmentación usado (útil para debug, aunque no se muestre en UI)
+    Args:
+        request: Solicitud HTTP con el archivo del formulario.
 
-    Nota: NO ejecuta Claude. Solo extracción + segmentación.
+    Returns:
+        JsonResponse con el ID del proyecto, el metodo de segmentacion,
+        el total de bloques y la lista de requerimientos detectados,
+        o un error si el analisis falla.
     """
     result = _get_upload_for_analyze_or_error(request)
     if isinstance(result, JsonResponse):
@@ -241,9 +315,12 @@ def analyze_document(request: HttpRequest) -> JsonResponse:
         file_bytes = uploaded.read()
 
         doc_text = extract_text_from_upload(filename, file_bytes)
-        project_id = extract_project_id(doc_text, filename=filename)  # ✅ evita None en NSC.*
+        project_id = extract_project_id(doc_text, filename=filename)
 
-        seg = segment_requirements_flexible(doc_text, project_id=(project_id or ""))
+        seg = segment_requirements_flexible(
+            doc_text,
+            project_id=(project_id or ""),
+        )
 
         requirements = [
             {
@@ -253,7 +330,8 @@ def analyze_document(request: HttpRequest) -> JsonResponse:
             for b in (seg.blocks or [])
         ]
 
-        # Evita payloads enormes (por seguridad UX)
+        # Se limita la respuesta para evitar payloads excesivamente
+        # grandes en documentos con muchos requerimientos.
         max_reqs = 400
         truncated = False
         if len(requirements) > max_reqs:
@@ -274,15 +352,25 @@ def analyze_document(request: HttpRequest) -> JsonResponse:
 
     except Exception:
         logger.exception("Analyze document failed")
-        return _json_error(status=500, code="ERR_ANALYZE", message=UI_ERR_ANALYZE)
+        return _json_error(
+            status=500,
+            code="ERR_ANALYZE",
+            message=UI_ERR_ANALYZE,
+        )
 
 
 @require_http_methods(["POST"])
+# Genera casos de prueba en modo sincronico.
 def generate(request: HttpRequest) -> JsonResponse:
     """
-    Genera casos de prueba en modo sincrónico.
+    Se mantiene como fallback para no romper integraciones existentes.
 
-    Nota: Se mantiene este endpoint como fallback para no romper integraciones o pruebas existentes.
+    Args:
+        request: Solicitud HTTP con el archivo y los datos del formulario.
+
+    Returns:
+        JsonResponse con el resultado de la generacion o un error si
+        el proceso falla.
     """
     result = _get_upload_for_generation_or_error(request)
     if isinstance(result, JsonResponse):
@@ -299,7 +387,7 @@ def generate(request: HttpRequest) -> JsonResponse:
             original_filename=filename,
             file_bytes=file_bytes,
             assigned_to=assigned_to,
-            selected_requirements=selected_numbers,  # ✅ NUEVO
+            selected_requirements=selected_numbers,
         )
 
         if not (payload.get("csv_out") or "").strip():
@@ -326,16 +414,33 @@ def generate(request: HttpRequest) -> JsonResponse:
 
     except ValueError as exc:
         logger.warning("Generation validation failed: %s", exc)
-        return _json_error(status=400, code="ERR_VALIDATION", message=str(exc))
+        return _json_error(
+            status=400,
+            code="ERR_VALIDATION",
+            message=str(exc),
+        )
 
     except Exception:
         logger.exception("Generation failed")
-        return _json_error(status=500, code="ERR_ENGINE", message=UI_ERR_ENGINE)
+        return _json_error(
+            status=500,
+            code="ERR_ENGINE",
+            message=UI_ERR_ENGINE,
+        )
 
 
 @require_http_methods(["POST"])
+# Genera casos de prueba en modo streaming emitiendo eventos NDJSON.
 def generate_stream(request: HttpRequest) -> HttpResponse:
-    """Genera casos de prueba en modo streaming (NDJSON)."""
+    """
+    Args:
+        request: Solicitud HTTP con el archivo y los datos del formulario.
+
+    Returns:
+        StreamingHttpResponse con los eventos de progreso y el evento
+        final de finalizacion, o JsonResponse de error si la validacion
+        falla antes de iniciar el streaming.
+    """
     result = _get_upload_for_generation_or_error(request)
     if isinstance(result, JsonResponse):
         return result
@@ -347,22 +452,34 @@ def generate_stream(request: HttpRequest) -> HttpResponse:
 
     file_bytes = uploaded.read()
 
+
+    # Serializa un diccionario a una línea NDJSON preservando tildes.
     def ndjson(obj: dict[str, Any]) -> str:
-        """Serializa un objeto a NDJSON preservando acentos."""
+        """
+        Args:
+            obj: Diccionario a serializar.
+
+        Returns:
+            Cadena JSON terminada en salto de linea.
+        """
         return json.dumps(obj, ensure_ascii=False) + "\n"
 
+    # Itera los eventos del motor y los emite como NDJSON.
     def event_iter() -> Iterator[str]:
         """
-        Itera eventos del motor y los emite como NDJSON.
+        Al recibir el evento de finalizacion, almacena el payload en
+        sesion para permitir la descarga posterior del CSV.
 
-        Si llega un evento final, se guarda en sesión el CSV para descarga.
+        Yields:
+            Lineas NDJSON con cada evento del motor o con el evento de
+            error si ocurre una excepcion durante el streaming.
         """
         try:
             for evt in iter_stream(
                 original_filename=filename,
                 file_bytes=file_bytes,
                 assigned_to=assigned_to,
-                selected_requirements=selected_numbers,  # ✅ NUEVO
+                selected_requirements=selected_numbers,
             ):
                 if evt.get("type") == EVENT_DONE:
                     payload = {
@@ -387,7 +504,10 @@ def generate_stream(request: HttpRequest) -> HttpResponse:
                 }
             )
 
-    resp = StreamingHttpResponse(event_iter(), content_type=CONTENT_TYPE_NDJSON)
+    resp = StreamingHttpResponse(
+        event_iter(),
+        content_type=CONTENT_TYPE_NDJSON,
+    )
     resp["Cache-Control"] = "no-cache"
     resp["X-Accel-Buffering"] = "no"
     resp["X-Content-Type-Options"] = "nosniff"
@@ -395,12 +515,22 @@ def generate_stream(request: HttpRequest) -> HttpResponse:
 
 
 @require_http_methods(["GET"])
+# Descarga el CSV generado previamente almacenado en la sesion.
 def download_csv(request: HttpRequest) -> HttpResponse:
-    """Descarga el CSV generado previamente desde la sesión."""
+    """
+    Args:
+        request: Solicitud HTTP entrante.
+
+    Returns:
+        HttpResponse con el archivo CSV listo para descarga, o una
+        respuesta de error si no hay resultado en sesion o el contenido
+        esta vacio.
+    """
     payload = request.session.get(_session_key())
     if not payload:
         return HttpResponse(
-            "No generated CSV found in session. Please generate test cases first.",
+            "No generated CSV found in session. "
+            "Please generate test cases first.",
             status=404,
             content_type=CONTENT_TYPE_TEXT,
         )
@@ -415,7 +545,10 @@ def download_csv(request: HttpRequest) -> HttpResponse:
             content_type=CONTENT_TYPE_TEXT,
         )
 
-    resp = HttpResponse(csv_out.encode("utf-8-sig"), content_type=CONTENT_TYPE_CSV)
+    resp = HttpResponse(
+        csv_out.encode("utf-8-sig"),
+        content_type=CONTENT_TYPE_CSV,
+    )
     resp["Content-Disposition"] = f'attachment; filename="{filename}"'
     resp["X-Content-Type-Options"] = "nosniff"
     resp["Cache-Control"] = "no-store"

@@ -1,14 +1,11 @@
 """
-Motor de generación para el generador automático de Casos de Prueba (TCs).
+Motor de generacion de casos de prueba a partir de documentos PDD y FDD.
 
-Flujo:
-1) Extrae texto del archivo (PDF/DOCX).
-2) Obtiene Project ID (con fallback por filename).
-3) Segmenta requerimientos (TO-BE / REQ IDs / HASH steps / process steps).
-4) (Opcional) Filtra requerimientos por selección del usuario.
-5) Llama al LLM por bloque y consolida la salida en CSV ADO.
+Este modulo extrae el texto del archivo, identifica el ID del proyecto,
+segmenta los requerimientos y llama al LLM por cada bloque para consolidar
+la salida en formato CSV compatible con Azure DevOps.
 
-Este módulo emite eventos (dict) para consumo de UI.
+Los resultados se emiten como eventos para consumo de la interfaz de usuario.
 """
 
 from __future__ import annotations
@@ -20,7 +17,11 @@ from typing import Any, Final, Iterator
 
 from django.conf import settings
 
-from core.ado_csv import dump_ado_rows, enforce_structure_and_titles, parse_ado_rows
+from core.ado_csv import (
+    dump_ado_rows,
+    enforce_structure_and_titles,
+    parse_ado_rows,
+)
 from core.claude_client import call_claude, get_client
 from core.context_pack import build_context_pack
 from core.extractor import extract_text_from_upload
@@ -31,13 +32,13 @@ from core.stats import compute_csv_stats
 
 logger = logging.getLogger(__name__)
 
-# Tipos de evento para la UI.
+# Tipos de evento emitidos hacia la interfaz de usuario.
 EVENT_META: Final[str] = "meta"
 EVENT_PROGRESS: Final[str] = "progress"
 EVENT_DONE: Final[str] = "done"
 EVENT_ERROR: Final[str] = "error"
 
-# Códigos de error/success para la UI.
+# Codigos de resultado para la interfaz de usuario.
 ERR_ASSIGNED_TO: Final[str] = "ERR_ASSIGNED_TO"
 ERR_NO_PROJECT_ID: Final[str] = "ERR_NO_PROJECT_ID"
 ERR_NO_REQS: Final[str] = "ERR_NO_REQS"
@@ -46,13 +47,16 @@ ERR_ENGINE: Final[str] = "ERR_ENGINE"
 
 OK_GENERATED: Final[str] = "OK_GENERATED"
 
-# Mensajes para la UI.
-MSG_ASSIGNED_TO_REQUIRED: Final[str] = "El campo 'Assigned To' es obligatorio."
+# Mensajes de respuesta para la interfaz de usuario.
+MSG_ASSIGNED_TO_REQUIRED: Final[str] = (
+    "El campo 'Assigned To' es obligatorio."
+)
 MSG_NO_PROJECT_ID: Final[str] = (
     "No se encontró el Project ID en el documento o en el nombre del archivo."
 )
 MSG_NO_REQS: Final[str] = (
-    "No fue posible segmentar requerimientos (TO-BE / FDD / Process Steps)."
+    "No fue posible segmentar requerimientos "
+    "(TO-BE / FDD / Process Steps)."
 )
 MSG_NO_SELECTED_REQS: Final[str] = (
     "No se encontraron requerimientos para la selección indicada."
@@ -62,7 +66,8 @@ MSG_ENGINE_ERROR: Final[str] = (
     "Ocurrió un error durante la generación. Revise los logs del servidor."
 )
 
-# Instrucciones de reparación para salidas no conformes al formato ADO CSV.
+# Instrucciones de reparacion para salidas que no cumplen el formato
+# ADO CSV requerido.
 REPAIR_INSTRUCTIONS: Final[str] = (
     "\n\nREPAIR: Your previous output did not comply with ADO CSV formatting. "
     "Return ONLY CSV rows with EXACTLY 15 columns (14 commas). "
@@ -71,7 +76,7 @@ REPAIR_INSTRUCTIONS: Final[str] = (
     "the backend will populate them."
 )
 
-# Llaves que la UI espera para métricas de límite (compatibilidad).
+# Claves de estadisticas de limite esperadas por la interfaz de usuario.
 STATS_LIMIT_TOTAL: Final[str] = "requirements_limit_reached_total"
 STATS_LIMIT_REQS: Final[str] = "requirements_limit_reached_list"
 STATS_LIMIT_DETAIL: Final[str] = "requirements_limit_reached_detail"
@@ -82,9 +87,19 @@ USAGE_OUTPUT: Final[str] = "output_tokens"
 NO_TC_START_DEFAULT: Final[int] = 1
 
 
-def _sum_usage(total: dict[str, int], add: dict[str, int] | None) -> dict[str, int]:
+# Acumula el conteo de tokens de dos diccionarios de uso.
+def _sum_usage(
+    total: dict[str, int],
+    add: dict[str, int] | None,
+) -> dict[str, int]:
     """
-    Suma el uso de tokens de manera acumulativa retornando un dict nuevo.
+    Args:
+        total: Acumulado actual de tokens de entrada y salida.
+        add: Valores a sumar al acumulado. Si es None se trata como
+            vacio.
+
+    Returns:
+        Nuevo diccionario con la suma de tokens de entrada y salida.
     """
     add = add or {}
 
@@ -99,6 +114,7 @@ def _sum_usage(total: dict[str, int], add: dict[str, int] | None) -> dict[str, i
     }
 
 
+# Construye el mensaje al LLM respetando el contrato de campos del prompt.
 def _build_user_text(
     *,
     project_id: str,
@@ -109,10 +125,17 @@ def _build_user_text(
     input_text: str,
 ) -> str:
     """
-    Construye el contenido del mensaje de usuario para el LLM.
+    Args:
+        project_id: Identificador del proyecto extraido del documento.
+        req_num: Numero del requerimiento a procesar.
+        scenario_name: Nombre del escenario asociado al requerimiento.
+        no_tc_start: Numero inicial para la numeracion de casos de
+            prueba.
+        global_context: Contexto global del documento.
+        input_text: Texto del bloque de requerimiento a procesar.
 
-    Nota:
-        Mantiene el contrato del prompt (IdProyecto, RequirementNumber, etc.).
+    Returns:
+        Cadena con el mensaje de usuario formateado para el LLM.
     """
     return (
         f"IdProyecto: {project_id}\n"
@@ -124,21 +147,40 @@ def _build_user_text(
     )
 
 
-def _error_event(code: str, message: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Construye un evento de error consistente para la UI."""
-    evt: dict[str, Any] = {"type": EVENT_ERROR, "code": code, "message": message}
+# Construye un evento de error con estructura consistente para la UI.
+def _error_event(
+    code: str,
+    message: str,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Args:
+        code: Codigo de error identificador del tipo de fallo.
+        message: Mensaje legible para el usuario.
+        extra: Campos adicionales opcionales a incluir en el evento.
+
+    Returns:
+        Diccionario con el evento de error listo para emitir.
+    """
+    evt: dict[str, Any] = {
+        "type": EVENT_ERROR,
+        "code": code,
+        "message": message,
+    }
     if extra:
         evt.update(extra)
     return evt
 
 
+# arga el prompt desde settings y valida que la ruta no esté vacía.
 def _load_prompt_text() -> str:
     """
-    Carga el prompt desde settings y valida que no esté vacío.
-
     Raises:
-        ValueError: Si el archivo existe pero está vacío.
-        FileNotFoundError: Si el archivo no existe.
+        ValueError: Si el archivo existe pero no contiene texto util.
+        FileNotFoundError: Si el archivo no existe en la ruta indicada.
+
+    Returns:
+        Texto del prompt listo para enviarse al LLM.
     """
     prompt_path = settings.PROMPT_FILE
     prompt_text = Path(prompt_path).read_text(encoding="utf-8").strip()
@@ -147,6 +189,7 @@ def _load_prompt_text() -> str:
     return prompt_text
 
 
+# Invoca el LLM y convierte la respuesta en filas ADO parseadas.
 def _llm_to_rows(
     *,
     client: Any,
@@ -154,12 +197,18 @@ def _llm_to_rows(
     user_text: str,
 ) -> tuple[list[list[str]], dict[str, int]]:
     """
-    Ejecuta el LLM y devuelve filas ADO parseadas.
+    Si la primera respuesta no es parseable como CSV ADO valido, realiza
+    un segundo intento adjuntando instrucciones de reparacion al mensaje
+    de usuario original.
 
-    Si el output no es parseable, reintenta una vez anexando REPAIR_INSTRUCTIONS.
+    Args:
+        client: Cliente del LLM inicializado.
+        prompt_text: Texto del prompt de sistema.
+        user_text: Mensaje de usuario con el contexto del requerimiento.
 
     Returns:
-        Tupla (rows, usage_total).
+        Tupla con la lista de filas ADO parseadas y el diccionario de
+        uso de tokens acumulado del intento o intentos realizados.
     """
     raw_out, usage = call_claude(
         client=client,
@@ -193,15 +242,25 @@ def _llm_to_rows(
     return rows2, usage_total
 
 
+# Filtra los bloques según los requerimientos seleccionados por el usuario.
 def _filter_blocks_by_selection(
     blocks: list[Any],
     selected_requirements: list[int] | None,
 ) -> tuple[list[Any], list[int], list[int] | None]:
     """
-    Filtra blocks por selection (si aplica).
+    Si no se proporciona seleccion, retorna todos los bloques sin
+    modificacion. Cuando se aplica filtro, calcula cuales de los
+    numeros solicitados no se encontraron en los bloques disponibles.
+
+    Args:
+        blocks: Lista completa de bloques de requerimiento segmentados.
+        selected_requirements: Numeros de requerimiento solicitados por
+            el usuario. Si es None o vacio, no se aplica filtro.
 
     Returns:
-        (filtered_blocks, missing_selected, selected_sorted_or_none)
+        Tupla con los bloques filtrados, la lista de numeros solicitados
+        que no se encontraron y la lista ordenada de seleccionados o
+        None si no se aplico filtro.
     """
     if not selected_requirements:
         return blocks, [], None
@@ -220,6 +279,7 @@ def _filter_blocks_by_selection(
     return filtered, missing, selected_sorted
 
 
+# Fuente unica de verdad para la generacion de casos de prueba.
 def iter_generation_events(
     *,
     filename: str,
@@ -228,13 +288,23 @@ def iter_generation_events(
     selected_requirements: list[int] | None = None,
 ) -> Iterator[dict[str, Any]]:
     """
-    Fuente única de verdad para la generación de casos de prueba.
+    Ejecuta el flujo completo de extraccion, segmentacion y generacion
+    emitiendo eventos de progreso para la interfaz de usuario. Ante
+    cualquier condicion de error emite un evento de error y detiene la
+    iteracion. Si ocurre una excepcion no controlada, la registra en el
+    log y emite un evento de error generico.
 
-    Eventos emitidos:
-    - {"type":"meta","total_blocks":N,...}
-    - {"type":"progress","done":i,"total":N,"req":<int>,"scenario":<str>,"secs":<float>}
-    - {"type":"done","ok":True,"download_filename":...,"csv_body":...,"usage":...,"elapsed":...,"stats":...}
-    - {"type":"error","code":"...","message":"..."}
+    Args:
+        filename: Nombre del archivo original subido.
+        file_bytes: Contenido binario del archivo.
+        assigned_to: Usuario al que se asignaran los casos de prueba
+            generados.
+        selected_requirements: Numeros de requerimiento a procesar. Si
+            es None se procesan todos los disponibles.
+
+    Yields:
+        Eventos de tipo meta, progress, done o error segun el estado
+        de la generacion.
     """
     start_all = time.perf_counter()
     usage_total: dict[str, int] = {USAGE_INPUT: 0, USAGE_OUTPUT: 0}
@@ -251,7 +321,8 @@ def iter_generation_events(
 
         doc_text = extract_text_from_upload(filename, file_bytes)
 
-        # ✅ Importante: fallback por filename para NSC.* / naming estándar
+        # Se pasa el nombre del archivo como respaldo para la extraccion
+        # del ID cuando el documento no lo contiene explicitamente.
         project_id = extract_project_id(doc_text, filename=filename)
         if not project_id:
             yield _error_event(ERR_NO_PROJECT_ID, MSG_NO_PROJECT_ID)
@@ -263,16 +334,22 @@ def iter_generation_events(
             yield _error_event(ERR_NO_REQS, MSG_NO_REQS)
             return
 
-        # ✅ Filtrar por selección (si aplica)
-        blocks, missing_selected, selected_sorted = _filter_blocks_by_selection(
-            blocks,
-            selected_requirements=selected_requirements,
+        # Se aplica el filtro de seleccion solo cuando el usuario
+        # especifico requerimientos concretos.
+        blocks, missing_selected, selected_sorted = (
+            _filter_blocks_by_selection(
+                blocks,
+                selected_requirements=selected_requirements,
+            )
         )
         if not blocks:
             yield _error_event(
                 ERR_NO_SELECTED_REQS,
                 MSG_NO_SELECTED_REQS,
-                extra={"missing_selected": missing_selected, "selected_requirements": selected_sorted},
+                extra={
+                    "missing_selected": missing_selected,
+                    "selected_requirements": selected_sorted,
+                },
             )
             return
 

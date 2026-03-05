@@ -16,5 +16,5 @@ class GenerateForm(forms.Form):
         f = self.cleaned_data["document"]
         content_type = getattr(f, "content_type", "") or ""
         if content_type not in ALLOWED_MIME:
-            raise ValidationError("Unsupported file type. Allowed: .pdf, .docx")
+            raise ValidationError("Unsupported file. Allowed: .pdf, .docx")
         return f

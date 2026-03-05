@@ -22,11 +22,9 @@ logger = logging.getLogger(__name__)
 ENV_API_KEY: Final[str] = "ANTHROPIC_API_KEY"
 DEFAULT_TEMPERATURE: Final[int] = 0
 
-
+# Crea un cliente de Anthropic usando la clave desde variables de entorno.
 def get_client() -> Anthropic:
     """
-    Crea un cliente de Anthropic usando la clave desde variables de entorno.
-
     Returns:
         Cliente de Anthropic configurado.
 
@@ -40,6 +38,7 @@ def get_client() -> Anthropic:
     return Anthropic(api_key=api_key)
 
 
+# Ejecuta una llamada al modelo y retorna el texto y las métricas de uso.
 def call_claude(
     *,
     client: Anthropic,
@@ -49,12 +48,6 @@ def call_claude(
     max_tokens: int,
 ) -> tuple[str, dict[str, int]]:
     """
-    Ejecuta una llamada al modelo y retorna el texto y las métricas de uso.
-
-    Notas:
-    - Se concatenan múltiples bloques de salida para evitar pérdida de contenido.
-    - El diccionario de usage siempre retorna enteros (0 si no están disponibles).
-
     Args:
         client: Cliente de Anthropic configurado.
         system_prompt: Prompt del sistema con instrucciones.
@@ -68,7 +61,7 @@ def call_claude(
         - usage: Diccionario con input_tokens y output_tokens.
 
     Raises:
-        Exception: Si falla la llamada al modelo (se registra en logs y se relanza).
+        Exception: Si falla la llamada(se registra en logs y se relanza).
     """
     try:
         msg = client.messages.create(
@@ -87,12 +80,8 @@ def call_claude(
     return output_text, usage
 
 
+# Concatena los bloques de texto de la respuesta en un solo string.
 def _join_text_blocks(content: Any) -> str:
-    """
-    Concatena los bloques de texto de la respuesta en un solo string.
-
-    Esta función es tolerante a respuestas sin contenido o con estructura parcial.
-    """
     parts: list[str] = []
     for block in content or []:
         text = getattr(block, "text", None)
@@ -102,10 +91,9 @@ def _join_text_blocks(content: Any) -> str:
     return "\n".join(parts).strip()
 
 
+# Extrae métricas de tokens desde el objeto usage.
 def _extract_usage(msg_usage: Any) -> dict[str, int]:
     """
-    Extrae métricas de tokens desde el objeto usage.
-
     Retorna 0 cuando no existen métricas.
     """
     usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
