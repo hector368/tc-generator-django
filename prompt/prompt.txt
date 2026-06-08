@@ -110,18 +110,13 @@ B) Precondiciones:
 - Si hay varias precondiciones, separarlas con “ • ” dentro de una sola línea.
 
 C) Pasos de ejecución PP:
-- Usarlos como base principal de los Test Steps.
-- Cada PP representa un hito, subflujo o bloque funcional, no necesariamente un TC separado.
-- Si varios PP pertenecen al mismo flujo y tienen el mismo resultado final, integrarlos en el mismo Happy Path.
-- La Acción de cada PP debe convertirse en Step action.
-- El Criterio de Aceptación de cada PP debe convertirse en Step expected.
-- No crear automáticamente un TC por cada PP.
+- Usarlos como base principal de los Test Steps dentro del mismo caso de prueba.
+- Los PP representan hitos o subflujos dentro de un proceso, NO son casos de prueba individuales.
+- Todos los PP que formen parte del camino ideal y exitoso deben integrarse cronológicamente en el mismo y único Happy Path.
 
 D) Criterios de Aceptación:
-- Usarlos como oráculo de prueba.
-- Deben guiar el Step expected y el Expected result general.
-- Si el criterio valida campos, reglas o formatos dentro del mismo resultado final, integrarlo en el mismo TC.
-- Solo generar TC separado si el criterio produce un outcome diferente.
+- Usarlos como oráculo de prueba para el campo "Step expected".
+- El cumplimiento de los criterios de aceptación exitosos se da por sentado y se valida dentro del Happy Path. NO crear un TC separado para validar que un criterio se cumpla exitosamente si no cambia el outcome principal del flujo.
 
 E) Restricciones:
 - Tratar solo las restricciones funcionales como condiciones de prueba.
@@ -154,14 +149,12 @@ H) Sistema, Input, Output y Actor:
 =================================================
 3) CLASIFICACIÓN OBLIGATORIA DE ESCENARIOS
 =================================================
-Cada caso de prueba debe clasificarse únicamente mediante el prefijo de Operating Scenario.
+Cada caso de prueba debe clasificarse únicamente mediante el prefijo de Operating Scenario en dos grandes categorías. La columna Type of test SIEMPRE debe ser “Functional”.
 
-La columna Type of test SIEMPRE debe ser “Functional”.
-
-A) Happy Path
-Usar cuando el caso valide el flujo principal exitoso del requerimiento.
-Debe cubrir la ejecución normal desde el input válido hasta el output esperado.
-No debe incluir errores, rechazos, advertencias, excepciones ni datos inválidos.
+A) Happy Path (Flujo Principal Exitoso)
+Usar únicamente cuando el caso valide el camino ideal y exitoso del requerimiento de principio a fin.
+- Incluye: Procesamiento de inputs válidos, formatos correctos, cumplimiento automático de criterios de aceptación exitosos y generación del output final esperado.
+- Regla de oro: No debe incluir errores, rechazos, advertencias, datos inválidos ni excepciones. Las validaciones de campos obligatorios correctos o formatos válidos se dan por probadas aquí implícitamente; NO crear casos individuales para ellas.
 
 Operating Scenario:
 “(Happy Path) - {ScenarioName}”
@@ -169,40 +162,13 @@ Operating Scenario:
 Priority:
 1
 
-B) Regla de negocio
-Usar cuando el caso valide RN, criterios de aceptación, restricciones funcionales o condiciones de negocio descritas en el requerimiento.
-
-Incluye:
-- formatos de datos
-- campos obligatorios
-- registros marcados como error
-- advertencias
-- rechazos de fila
-- duplicados
-- omisión de registros por regla funcional
-- validaciones de columnas
-- transformación o clasificación de datos
-- restricciones funcionales verificables
-
-Operating Scenario:
-“(Regla de negocio) - {ScenarioName}”
-
-Priority:
-2
-
-C) Excepción
-Usar cuando el caso valide una excepción explícita o flujo alterno de error.
-
-Incluye cuando el bot debe:
-- reintentar
-- detener el proceso
-- notificar al usuario
-- registrar error
-- continuar con el siguiente elemento
-- finalizar el proceso
-- manejar archivo corrupto
-- manejar reporte no disponible
-- ejecutar una EXC definida
+B) Excepción (Flujos Alternos y Desviaciones)
+Usar cuando el proceso se desvíe del camino feliz, ya sea por validaciones de negocio insatisfechas, datos inválidos, alertas o errores previstos en el requerimiento.
+- Incluye: 
+  • Violación de Reglas de Negocio (formatos inválidos, campos obligatorios vacíos, registros duplicados, datos fuera de rango o restricciones funcionales).
+  • Excepciones operativas descritas explícitamente en el texto del requerimiento.
+  • Respuestas de control del bot ante fallos (detener proceso, registrar estatus de error, enviar alertas o notificaciones de rechazo).
+- Regla de oro: Se debe generar un único caso de prueba por cada Causa/Trigger que desvíe al bot, consolidando en ese mismo caso la validación de la regla, el cambio de estatus y la notificación o alerta resultante.
 
 Operating Scenario:
 “(Excepción) - {ScenarioName}”
@@ -212,11 +178,9 @@ Priority:
 
 Reglas obligatorias:
 - La columna Type of test siempre debe ser “Functional”.
-- No crear TCs fuera de estas tres clasificaciones.
-- No crear TCs no funcionales.
-- No usar “Non-Functional”.
-- Si una condición de tiempo, volumen, capacidad o rendimiento aparece en el requerimiento, ignorarla para la generación de TCs salvo que tenga consecuencia funcional explícita.
-- La clasificación se determina por el objetivo del TC, no solo por la prioridad.
+- No crear TCs fuera de estas dos clasificaciones.
+- No crear TCs no funcionales ni usar “Non-Functional”.
+- Si una condición de negocio genera consecuencias funcionales distintas, crear un caso de Excepción para cada outcome funcional diferente, pero nunca micro-casos por cada campo individual validado.
 
 =================================================
 3.1) COBERTURA Y CALIDAD DE LOS CASOS DE PRUEBA
@@ -224,30 +188,15 @@ Reglas obligatorias:
 Generar casos de prueba por Outcome + Trigger.
 
 Definiciones:
-- Outcome = resultado final verificable del caso completo.
+- Outcome = resultado final de negocio verificable del caso completo.
 - Trigger = condición que provoca un comportamiento, decisión o ruta distinta.
-
-Outcomes posibles:
-- Éxito y continuidad del flujo.
-- Generación de archivo o reporte.
-- Registro de error.
-- Advertencia.
-- Rechazo de fila.
-- Omisión de registro.
-- Detención del proceso.
-- Reintento y continuidad.
-- Reintento y detención.
-- Notificación al usuario.
-- Finalización del proceso.
 
 Cobertura obligatoria:
 - Happy Path con Priority=1.
-- Regla de negocio con Priority=2 solo si existen RN, criterios, validaciones o restricciones funcionales explícitas.
-- Excepción con Priority=2 solo si existen EXC o flujos alternos de error explícitos.
+- Excepción con Priority=2 solo si existen validaciones, restricciones, EXC o flujos alternos de error explícitos que saquen al bot del camino feliz.
 
 Regla principal:
-- Solo crear un TC adicional si el outcome es diferente o si la cobertura agrupada perdería claridad.
-- Si el outcome es el mismo, fusionar la cobertura dentro del mismo TC usando redacción condicional en los pasos.
+- Solo crear un TC de Excepción si el outcome final del desvío es diferente o si la cobertura agrupada perdería total claridad. Si el comportamiento ante diferentes variaciones de datos inválidos es exactamente el mismo, fusionar la cobertura dentro del mismo TC de excepción usando redacción condicional en los pasos.
 
 =================================================
 3.2) HAPPY PATH EN FORMATO BA/PDD
@@ -262,44 +211,24 @@ Regla principal:
 - Cada TC dividido por hito debe tener Objetive y Expected result distintos.
 
 =================================================
-3.3) REGLA ESPECIAL PARA RN
+3.3) REGLA ESPECIAL PARA RN (REGLAS DE NEGOCIO)
 =================================================
-Identificar todas las RN mencionadas en el requerimiento y clasificarlas por outcome:
+Identificar todas las RN mencionadas en el requerimiento y clasificarlas según cómo afectan al flujo:
 
-- Marca error.
-- Genera advertencia.
-- Rechaza fila.
-- Resalta registro.
-- Ignora registro.
-- Permite continuar.
-- Detiene proceso.
-- Notifica usuario.
-- Genera archivo.
-- Actualiza reporte.
-
-Reglas:
-- Agrupar en un mismo TC las RN que se validen dentro del mismo procesamiento y no cambien la ruta principal.
-- Separar en TC distintos las RN que cambien el outcome final o la ruta del flujo.
-- No crear TC separado para una RN si puede validarse como parte de un paso de procesamiento.
-- Cuando una RN se incluya en un paso, mencionar su ID entre paréntesis.
-- Si varias RN se validan en el mismo paso, pueden mencionarse juntas.
+Reglas de Consolidación:
+- Si la RN describe un comportamiento exitoso o un criterio de validación correcto, esta regla se valida de forma implícita dentro del Happy Path. NO crear un caso separado.
+- Si la RN describe una restricción, advertencia, rechazo, bloqueo o comportamiento alterno, se debe mapear y generar como un caso bajo la clasificación de “(Excepción) - {ScenarioName}”.
+- Agrupar en un mismo TC de Excepción las RN que se validen en el mismo momento del procesamiento y compartan la misma consecuencia o respuesta funcional.
 - No inventar RN no documentadas.
-- No incluir RN de error, advertencia, rechazo o datos inválidos dentro del Happy Path.
-- Las RN deben clasificarse como “(Regla de negocio) - {ScenarioName}” en Operating Scenario.
 
 =================================================
 3.4) REGLA ESPECIAL PARA EXCEPCIONES
 =================================================
-- Toda excepción EXC explícita debe evaluarse para generar TC de Excepción.
-- Crear TC de Excepción cuando la EXC tenga causa y comportamiento esperado.
-- El Step action debe incluir el trigger de la excepción.
-- El Step expected debe incluir la respuesta esperada del bot.
-- El Expected result general debe indicar el resultado final de la excepción.
-- Si la excepción incluye mensaje exacto, conservarlo tal cual.
-- Si la excepción incluye destinatario parametrizable, escribir “según configuración” salvo que el correo esté explícito.
-- No crear excepciones no documentadas.
-- No crear negativos para escenarios que no tengan comportamiento esperado definido.
-- Las excepciones deben clasificarse como “(Excepción) - {ScenarioName}” en Operating Scenario.
+- Toda excepción EXC explícita de negocio debe evaluarse para generar un TC de Excepción.
+- El Step action debe incluir el trigger de la excepción y el Step expected la respuesta esperada del bot.
+
+EXCLUSIÓN DE EXCEPCIONES TÉCNICAS (MUY IMPORTANTE):
+- Las excepciones válidas deben clasificarse obligatoriamente como “(Excepción) - {ScenarioName}” en Operating Scenario.
 
 =================================================
 3.5) EXCLUSIÓN DE PRUEBAS NO FUNCIONALES
@@ -317,19 +246,11 @@ Reglas:
 =================================================
 3.6) REGLAS ANTI-REDUNDANCIA
 =================================================
-- No crear TCs separados por variantes de datos si el outcome es el mismo.
-- No crear TCs separados por notas si el outcome es el mismo.
-- No crear TCs separados por cada campo, columna o regla si se validan dentro del mismo flujo.
-- No duplicar TCs que compartan el mismo objetivo y expected result.
-- Si dos TCs comparten 3 o más pasos consecutivos iguales, fusionarlos salvo que tengan outcomes diferentes.
-- Integrar variantes dentro del Step action usando:
-  • considerando que
-  • cuando
-  • si
-  • incluyendo
-  • aun si
-- Solo separar TCs cuando la variante cambie el resultado final, la ruta del proceso o la respuesta del bot.
-- No generar más TCs solo para aumentar cobertura si esa cobertura puede quedar integrada en un TC existente.
+- PROHIBIDO crear TCs separados por variantes de datos o notas si el outcome final del bot es el mismo.
+- No crear TCs individuales para validar campos uno por uno si se procesan dentro del mismo flujo.
+- No duplicar TCs que compartan el mismo objetivo y resultado esperado general.
+- Integrar variantes de datos de entrada inválidos dentro del Step action de un solo TC de Excepción usando conectores como: "cuando", "si", "incluyendo", "o si".
+- Reducir drásticamente la cantidad de TCs priorizando la consolidación: es preferible tener un único caso robusto de Excepción que valide múltiples entradas inválidas correlacionadas, que micro-casos individuales que saturen la suite.
 
 =================================================
 3.7) EMPAQUETADO POR COBERTURA
@@ -433,19 +354,13 @@ Ejemplo:
 4.4) Expected result general
 - Debe ser un solo párrafo.
 - Debe tener máximo 2 oraciones cortas.
-- Debe describir el resultado final del caso completo.
-- No repetir todos los pasos intermedios.
-- Debe incluir el cumplimiento exitoso del requerimiento o el comportamiento esperado de regla/excepción.
-- No debe enumerar todos los campos o reglas si ya se detallaron en los pasos.
+- Debe describir el resultado final del caso completo sin enumerar todos los pasos intermedios.
 
 Fórmula Happy Path:
-“El bot {acciones principales importantes} y {resultado clave final}.”
-
-Fórmula Regla de negocio:
-“El bot {aplica o valida la regla de negocio} y {refleja el resultado definido por el requerimiento}.”
+“El bot {acciones principales importantes} y {resultado clave final con éxito}.”
 
 Fórmula Excepción:
-“El bot {detecta condición de excepción} y {ejecuta respuesta esperada definida}.”
+“El bot {detecta condición de excepción o violación de regla de negocio} y {ejecuta respuesta esperada, alertas y notificaciones definidas}.”
 
 =================================================
 5) PRIORIDAD, TYPE OF TEST Y OPERATING SCENARIO
@@ -466,8 +381,6 @@ Operating Scenario:
 - Agregar un prefijo obligatorio según el tipo de escenario:
   • Si el caso valida el flujo principal exitoso:
     “(Happy Path) - {ScenarioName}”
-  • Si el caso valida reglas de negocio, RN, restricciones funcionales, criterios de aceptación o validaciones de datos:
-    “(Regla de negocio) - {ScenarioName}”
   • Si el caso valida errores, fallos, EXC explícitas, reintentos, detenciones, notificaciones por error o flujos alternos:
     “(Excepción) - {ScenarioName}”
 
@@ -536,7 +449,6 @@ K) Operating Scenario
 - Usar ScenarioName exacto.
 - Prefijo obligatorio según la clasificación del escenario:
   • Happy Path → “(Happy Path) - {ScenarioName}”
-  • Regla de negocio → “(Regla de negocio) - {ScenarioName}”
   • Excepción → “(Excepción) - {ScenarioName}”
 - La clasificación se determina por el objetivo del TC, no solo por la prioridad.
 
@@ -634,7 +546,6 @@ Antes de devolver el CSV, validar mentalmente:
 - No hay TCs duplicados por RN, notas o variantes.
 - Los PP se usaron como pasos o hitos, no como TCs automáticos.
 - Los criterios de aceptación se reflejan en Step expected.
-- Las RN explícitas se clasifican como “(Regla de negocio)” cuando corresponde.
 - Las EXC explícitas con comportamiento esperado se clasifican como “(Excepción)”.
 - No se generaron casos no funcionales.
 - No se generaron casos por tiempo, volumen, capacidad, rendimiento o performance.
@@ -645,8 +556,8 @@ Antes de devolver el CSV, validar mentalmente:
 - Priority solo contiene 1 o 2.
 - Operating Scenario contiene uno de estos prefijos:
   • “(Happy Path) - ”
-  • “(Regla de negocio) - ”
   • “(Excepción) - ”
+- Las EXC explícitas y violaciones de RN con comportamiento alterno se clasifican como “(Excepción)”.
 
 =================================================
 INSTRUCCIÓN FINAL OBLIGATORIA
