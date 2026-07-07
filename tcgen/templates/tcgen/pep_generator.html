@@ -1,0 +1,255 @@
+{% load static %}
+<!--
+Trazabilidad Técnica:
+- PEP-WEB-001: Pantalla independiente para generación de PEP.
+- PEP-WEB-002: Carga de documentos PAP y PDD/FDD.
+- PEP-WEB-003: Preview de información extraída y selección TO-BE.
+- PEP-WEB-004: Descarga de PEP generado en formato DOCX.
+-->
+<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Beecker | PEP Generator</title>
+
+  <link rel="icon" href="{% static 'tcgen/img/favicon.ico' %}" type="image/x-icon" />
+  <link rel="stylesheet" href="{% static 'tcgen/style.css' %}" />
+</head>
+<body>
+  <noscript>
+    <div class="noscript-warning">
+      Este sitio requiere JavaScript para generar el PEP.
+    </div>
+  </noscript>
+
+  <header class="beecker-header">
+    <div class="bh-left">
+      <img src="{% static 'tcgen/img/b-logo.png' %}" alt="Beecker" />
+    </div>
+
+    <div class="bh-center">
+      <div class="bh-title">PEP Generator</div>
+    </div>
+
+    <div class="bh-right">
+      <img src="{% static 'tcgen/img/logo.png' %}" alt="Logo" />
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="page-inner">
+      <section class="card large-card">
+        <div class="card-inner">
+
+          <section aria-labelledby="pepUploadTitle">
+            <div class="upload-head">
+              <div>
+                <h1 id="pepUploadTitle" class="upload-title">
+                  Generate PEP (Plan Estratégico de Pruebas)
+                </h1>
+                <p class="upload-sub">
+                  Upload the PAP and PDD/FDD documents. The system will extract project data,
+                  identify TO-BE requirements and generate the PEP using the integrated template.
+                </p>
+              </div>
+
+              <div class="upload-badges" aria-label="Formats and flow">
+                <a class="badge-mini" href="{% url 'tcgen_home' %}">
+                  ← Test Case Generator
+                </a>
+                <div class="badge-mini">
+                  📄 <span>PDF / DOCX</span>
+                </div>
+                <div class="badge-mini">
+                  🧾 <span>Integrated PEP template</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="hr" aria-hidden="true"></div>
+
+            <form id="pepForm"
+                  method="post"
+                  enctype="multipart/form-data"
+                  data-preview-url="{% url 'tcgen_pep_preview' %}"
+                  data-generate-url="{% url 'tcgen_pep_generate' %}">
+              {% csrf_token %}
+
+              <fieldset class="form-section" aria-labelledby="papLegend">
+                <legend id="papLegend" class="section-legend">PAP Document</legend>
+
+                <div class="field">
+                  <div class="label-row">
+                    <label class="label" for="id_pap_document">Upload PAP document</label>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                      <button type="button" class="req-chip req-chip--ghost" id="papInfoBtn">
+                        ⓘ Info
+                      </button>
+                      <span class="required-chip" aria-hidden="true">Required</span>
+                    </div>
+                  </div>
+
+                  <input id="id_pap_document"
+                         name="pap_document"
+                         type="file"
+                         accept=".pdf,.docx" />
+
+                  <p class="help">
+                    Used to extract project name, client, technology, roles, software requirements and hardware requirements.
+                  </p>
+                </div>
+              </fieldset>
+
+              <fieldset class="form-section" aria-labelledby="pddLegend">
+                <legend id="pddLegend" class="section-legend">PDD/FDD Document</legend>
+
+                <div class="field">
+                  <div class="label-row">
+                    <label class="label" for="id_pdd_document">Upload PDD/FDD document</label>
+                      <div style="display:flex; gap:8px; align-items:center;">
+                      <button type="button" class="req-chip req-chip--ghost" id="pddInfoBtn">
+                        ⓘ Info
+                      </button>
+                      <span class="required-chip" aria-hidden="true">Required</span>
+                    </div>
+                  </div>
+
+                  <input id="id_pdd_document"
+                         name="pdd_document"
+                         type="file"
+                         accept=".pdf,.docx" />
+
+                  <p class="help">
+                    Used to detect the TO-BE requirement titles that will be inserted into section 5.1 of the PEP.
+                  </p>
+                </div>
+              </fieldset>
+
+              <input type="hidden"
+                     id="selectedRequirements"
+                     name="selected_requirements"
+                     value="" />
+
+              <div class="cta-wrap" aria-hidden="true"></div>
+
+              <div class="cta-row">
+                <div class="cta-spacer"></div>
+                <button class="btn btn-primary" type="button" id="previewBtn">
+                  Analyze documents
+                </button>
+                <div class="cta-spacer"></div>
+              </div>
+            </form>
+          </section>
+
+          <section id="pepPreviewCard" style="display:none;">
+            <div class="ready-head">
+              <div>
+                <h2 class="ready-title">Review extracted PEP data</h2>
+                  <p class="ready-sub">
+                    Confirm the detected project data and select the TO-BE requirements before downloading the final document.
+                  </p>
+              </div>
+
+              <div class="ready-badges">
+                <div class="badge-mini">
+                  📄 File name: <span id="pepFilename">PEP.docx</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="hr" aria-hidden="true"></div>
+
+            <div class="metrics">
+              <div class="metric">
+                <div class="metric-label">Project ID</div>
+                <div id="pepProjectId" class="metric-value">-</div>
+              </div>
+
+              <div class="metric">
+                <div class="metric-label">Client</div>
+                <div id="pepClient" class="metric-value">-</div>
+              </div>
+            
+              <div class="metric">
+                <div class="metric-label">Technology</div>
+                <div id="pepTechnology" class="metric-value">-</div>
+              </div>
+            
+              <div class="metric">
+                <div class="metric-label">Technology detection</div>
+                <div id="pepDetectionType" class="metric-value">-</div>
+              </div>
+            
+              <div class="metric">
+                <div class="metric-label">Total cost (USD)</div>
+                <div id="pepCost" class="metric-value">$0.00</div>
+              </div>
+            
+              <div class="metric">
+                <div class="metric-label">Generated file</div>
+                <div id="pepFilenameMetric" class="metric-value">PEP.docx</div>
+              </div>
+            </div>
+
+            <div id="pepTechnologyJustification" class="metric-detail" hidden>
+              <div class="metric-detail__title">Technology detection justification</div>
+              <ul class="metric-detail__list">
+                <li id="pepTechnologyJustificationText">-</li>
+              </ul>
+            </div>
+
+            <div id="pepWarnings" class="metric-detail" hidden>
+              <div class="metric-detail__title">Warnings</div>
+              <ul id="pepWarningsList" class="metric-detail__list"></ul>
+            </div>
+
+
+
+            <div class="hr" aria-hidden="true"></div>
+
+            <div class="cta-row">
+              <div class="cta-spacer"></div>
+              <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+                <button class="btn btn-secondary" type="button" id="viewJsonBtn">
+                  View JSON
+                </button>
+              
+                <button class="btn btn-secondary" type="button" id="generatePepBtn">
+                  Generate and download PEP
+                </button>
+              </div>
+              <div class="cta-spacer"></div>
+            </div>
+          </section>
+
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div class="beecker-overlay" id="overlay" aria-hidden="true">
+    <div class="beecker-overlay-card" role="status" aria-live="polite" aria-atomic="true">
+      <div class="beecker-loader-row">
+        <div class="beecker-spinner" aria-hidden="true"></div>
+        <div>
+          <div class="beecker-loader-title" id="overlayTitle">
+            Processing documents
+          </div>
+          <div class="beecker-loader-sub" id="progressText">
+            Please do not close this window.
+          </div>
+        </div>
+      </div>
+
+      <div class="beecker-progress-bar">
+        <div class="beecker-progress" id="progressBar"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="{% static 'vendor/sweetalert2/sweetalert2.all.min.js' %}" defer></script>
+  <script src="{% static 'tcgen/pep_generator.js' %}" defer></script>
+</body>
+</html>
