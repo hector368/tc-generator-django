@@ -4,10 +4,11 @@ Vistas Django para el flujo de generación de PEP.
 Este módulo mantiene separado el flujo PEP del generador actual de
 casos de prueba, reduciendo el riesgo de afectar el proceso existente.
 """
+
 from __future__ import annotations
 
 import hashlib
-
+from io import BytesIO
 from typing import Any
 
 from django.conf import settings
@@ -17,20 +18,23 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
+from pydantic import ValidationError
 
-from tcgen.services.pep.pep_orchestrator import build_pep_preview
-from tcgen.services.pep.pep_orchestrator import generate_pep_document
+from tcgen.services.pep.pap_schema import validate_pap_payload
+from tcgen.services.pep.pdd_schema import validate_pdd_payload
+from tcgen.services.pep.pep_orchestrator import (
+    build_pep_preview,
+    generate_pep_document,
+    generate_pep_document_from_validated_data,
+)
 from tcgen.utils.validators import validate_extension
 from tcgen.utils.validators import validate_size
 
-from tcgen.services.pep.pap_schema import validate_pap_payload
-from tcgen.services.pep.pep_orchestrator import (
-    generate_pep_document_from_validated_data,
-)
-from tcgen.services.pep.tobe_requirements import extract_tobe_requirements
 
 ALLOWED_DOCUMENT_EXTS = (".pdf", ".docx")
-PEP_PAP_CACHE_KEY = "pep_cached_pap_payload"
+
+PEP_ANALYSIS_CACHE_KEY = "pep_cached_analysis_payload"
+
 
 @require_GET
 def pep_home(request: HttpRequest):
@@ -43,24 +47,27 @@ def pep_home(request: HttpRequest):
     Returns:
         Respuesta HTML.
     """
-    return render(request, "tcgen/pep_generator.html")
+    return render(
+        request,
+        "tcgen/pep_generator.html",
+    )
 
 
 @require_POST
-@require_POST
-def pep_preview(request: HttpRequest) -> JsonResponse:
+def pep_preview(
+    request: HttpRequest,
+) -> JsonResponse:
     """
     Genera una previsualización del PEP.
 
-    Recibe PAP y PDD/FDD, extrae la información necesaria y devuelve
-    un JSON combinado para la UI. Además, guarda el resultado PAP en
-    sesión para evitar una segunda llamada a Claude al generar el DOCX.
+    Analiza PAP y PDD/FDD, calcula los insumos y almacena los resultados
+    validados en sesión para reutilizarlos durante la generación del DOCX.
 
     Args:
         request: Petición HTTP con archivos multipart.
 
     Returns:
-        JsonResponse con resumen PAP + TO-BE.
+        JsonResponse con los datos analizados del PEP.
     """
     pap_file = request.FILES.get("pap_document")
     pdd_file = request.FILES.get("pdd_document")
@@ -69,16 +76,12 @@ def pep_preview(request: HttpRequest) -> JsonResponse:
         pap_file=pap_file,
         pdd_file=pdd_file,
     )
+
     if upload_error:
         return upload_error
 
-    selected_requirements = _parse_selected_requirements(
-        request.POST.get("selected_requirements", ""),
-    )
-
     pap_bytes = pap_file.read()
     pdd_bytes = pdd_file.read()
-    pap_hash = _hash_bytes(pap_bytes)
 
     try:
         result = build_pep_preview(
@@ -86,7 +89,6 @@ def pep_preview(request: HttpRequest) -> JsonResponse:
             pap_bytes=pap_bytes,
             pdd_filename=pdd_file.name,
             pdd_bytes=pdd_bytes,
-            selected_requirements=selected_requirements,
         )
     except Exception as exc:
         return _json_error(
@@ -95,30 +97,36 @@ def pep_preview(request: HttpRequest) -> JsonResponse:
             status=400,
         )
 
-    request.session[PEP_PAP_CACHE_KEY] = {
-        "pap_hash": pap_hash,
+    request.session[PEP_ANALYSIS_CACHE_KEY] = {
+        "pap_hash": _hash_bytes(pap_bytes),
+        "pdd_hash": _hash_bytes(pdd_bytes),
         "pap": result.payload.get("pap"),
+        "pdd": result.payload.get("pdd"),
     }
+
     request.session.modified = True
 
-    return JsonResponse(result.payload, status=200)
+    return JsonResponse(
+        result.payload,
+        status=200,
+    )
 
 
 @require_POST
-@require_POST
-def pep_generate(request: HttpRequest) -> FileResponse | JsonResponse:
+def pep_generate(
+    request: HttpRequest,
+) -> FileResponse | JsonResponse:
     """
     Genera y descarga el documento PEP final.
 
-    Si existe una extracción PAP cacheada desde la previsualización y
-    corresponde al mismo archivo PAP, reutiliza esa información para no
-    llamar a Claude por segunda vez.
+    Reutiliza los análisis PAP y PDD/FDD almacenados durante la
+    previsualización cuando ambos archivos coinciden con el cache.
 
     Args:
-        request: Petición HTTP con PAP, PDD/FDD y selección opcional.
+        request: Petición HTTP con PAP y PDD/FDD.
 
     Returns:
-        FileResponse con DOCX o JsonResponse de error.
+        FileResponse con el DOCX o JsonResponse de error.
     """
     pap_file = request.FILES.get("pap_document")
     pdd_file = request.FILES.get("pdd_document")
@@ -127,12 +135,9 @@ def pep_generate(request: HttpRequest) -> FileResponse | JsonResponse:
         pap_file=pap_file,
         pdd_file=pdd_file,
     )
+
     if upload_error:
         return upload_error
-
-    selected_requirements = _parse_selected_requirements(
-        request.POST.get("selected_requirements", ""),
-    )
 
     pap_bytes = pap_file.read()
     pdd_bytes = pdd_file.read()
@@ -144,7 +149,6 @@ def pep_generate(request: HttpRequest) -> FileResponse | JsonResponse:
             pap_bytes=pap_bytes,
             pdd_filename=pdd_file.name,
             pdd_bytes=pdd_bytes,
-            selected_requirements=selected_requirements,
         )
     except Exception as exc:
         return _json_error(
@@ -162,9 +166,11 @@ def pep_generate(request: HttpRequest) -> FileResponse | JsonResponse:
             "wordprocessingml.document"
         ),
     )
+
     response["X-PEP-Filename"] = result.filename
 
     return response
+
 
 def _generate_pep_with_cache_fallback(
     *,
@@ -173,80 +179,114 @@ def _generate_pep_with_cache_fallback(
     pap_bytes: bytes,
     pdd_filename: str,
     pdd_bytes: bytes,
-    selected_requirements: list[int] | None,
 ):
     """
-    Genera el PEP reutilizando la extracción PAP cacheada si es válida.
+    Genera el PEP reutilizando el análisis cacheado cuando es válido.
+
+    Si el PAP o PDD/FDD cambió, ejecuta nuevamente el flujo completo.
 
     Args:
         request: Petición HTTP actual.
-        pap_filename: Nombre del PAP.
-        pap_bytes: Bytes del PAP.
-        pdd_filename: Nombre del PDD/FDD.
-        pdd_bytes: Bytes del PDD/FDD.
-        selected_requirements: Requerimientos seleccionados.
+        pap_filename: Nombre del archivo PAP.
+        pap_bytes: Contenido binario del PAP.
+        pdd_filename: Nombre del archivo PDD/FDD.
+        pdd_bytes: Contenido binario del PDD/FDD.
 
     Returns:
-        Resultado de generación PEP.
+        Resultado de generación del PEP.
     """
-    cached_payload = request.session.get(PEP_PAP_CACHE_KEY)
-    current_hash = _hash_bytes(pap_bytes)
+    cached_payload = request.session.get(
+        PEP_ANALYSIS_CACHE_KEY,
+    )
 
-    if _is_valid_pap_cache(cached_payload, current_hash):
-        pap_data = validate_pap_payload(cached_payload["pap"])
+    current_pap_hash = _hash_bytes(pap_bytes)
+    current_pdd_hash = _hash_bytes(pdd_bytes)
 
-        tobe_data = extract_tobe_requirements(
-            filename=pdd_filename,
-            file_bytes=pdd_bytes,
-            selected_requirements=selected_requirements,
-        )
+    if _is_valid_analysis_cache(
+        cached_payload=cached_payload,
+        current_pap_hash=current_pap_hash,
+        current_pdd_hash=current_pdd_hash,
+    ):
+        try:
+            pap_data = validate_pap_payload(
+                cached_payload["pap"],
+            )
 
-        return generate_pep_document_from_validated_data(
-            pap_data=pap_data,
-            tobe_data=tobe_data,
-        )
+            pdd_data = validate_pdd_payload(
+                cached_payload["pdd"],
+            )
+        except (
+            ValidationError,
+            TypeError,
+            ValueError,
+        ):
+            pass
+        else:
+            return generate_pep_document_from_validated_data(
+                pap_data=pap_data,
+                pdd_data=pdd_data,
+            )
 
     return generate_pep_document(
         pap_filename=pap_filename,
         pap_bytes=pap_bytes,
         pdd_filename=pdd_filename,
         pdd_bytes=pdd_bytes,
-        selected_requirements=selected_requirements,
     )
 
 
-def _is_valid_pap_cache(
+def _is_valid_analysis_cache(
+    *,
     cached_payload: Any,
-    current_hash: str,
+    current_pap_hash: str,
+    current_pdd_hash: str,
 ) -> bool:
     """
-    Valida si el cache PAP de sesión corresponde al archivo actual.
+    Valida que el cache corresponda al PAP y PDD/FDD actuales.
 
     Args:
-        cached_payload: Payload guardado en sesión.
-        current_hash: Hash SHA-256 del PAP actual.
+        cached_payload: Información almacenada en sesión.
+        current_pap_hash: Hash SHA-256 del PAP actual.
+        current_pdd_hash: Hash SHA-256 del PDD/FDD actual.
 
     Returns:
-        True si el cache puede reutilizarse.
+        True cuando ambos análisis pueden reutilizarse.
     """
     if not isinstance(cached_payload, dict):
         return False
 
-    cached_hash = cached_payload.get("pap_hash")
-    cached_pap = cached_payload.get("pap")
-
-    if cached_hash != current_hash:
+    if (
+        cached_payload.get("pap_hash")
+        != current_pap_hash
+    ):
         return False
 
-    if not isinstance(cached_pap, dict):
+    if (
+        cached_payload.get("pdd_hash")
+        != current_pdd_hash
+    ):
+        return False
+
+    if not isinstance(
+        cached_payload.get("pap"),
+        dict,
+    ):
+        return False
+
+    if not isinstance(
+        cached_payload.get("pdd"),
+        dict,
+    ):
         return False
 
     return True
 
 
-def _hash_bytes(content: bytes) -> str:
+def _hash_bytes(
+    content: bytes,
+) -> str:
     """
-    Calcula hash SHA-256 de un contenido binario.
+    Calcula el hash SHA-256 de un contenido binario.
 
     Args:
         content: Bytes del archivo.
@@ -254,7 +294,10 @@ def _hash_bytes(content: bytes) -> str:
     Returns:
         Hash hexadecimal.
     """
-    return hashlib.sha256(content).hexdigest()
+    return hashlib.sha256(
+        content,
+    ).hexdigest()
+
 
 def _validate_pep_uploads(
     *,
@@ -269,7 +312,7 @@ def _validate_pep_uploads(
         pdd_file: Archivo PDD/FDD subido.
 
     Returns:
-        JsonResponse si existe error, None si todo es válido.
+        JsonResponse si existe error o None.
     """
     if pap_file is None:
         return _json_error(
@@ -289,6 +332,7 @@ def _validate_pep_uploads(
         uploaded_file=pap_file,
         label="PAP",
     )
+
     if pap_error:
         return pap_error
 
@@ -296,6 +340,7 @@ def _validate_pep_uploads(
         uploaded_file=pdd_file,
         label="PDD/FDD",
     )
+
     if pdd_error:
         return pdd_error
 
@@ -312,7 +357,7 @@ def _validate_single_upload(
 
     Args:
         uploaded_file: Archivo subido.
-        label: Nombre lógico del archivo para mensajes.
+        label: Nombre lógico usado en los mensajes.
 
     Returns:
         JsonResponse de error o None.
@@ -321,12 +366,21 @@ def _validate_single_upload(
         uploaded_file.name,
         ALLOWED_DOCUMENT_EXTS,
     )
+
     if not ext_validation.ok:
         return _json_error(
-            code=getattr(ext_validation, "code", "ERR_BAD_EXT"),
+            code=getattr(
+                ext_validation,
+                "code",
+                "ERR_BAD_EXT",
+            ),
             message=(
                 f"{label}: "
-                f"{getattr(ext_validation, 'message', 'Extensión inválida.')}"
+                f"{getattr(
+                    ext_validation,
+                    'message',
+                    'Extensión inválida.',
+                )}"
             ),
             status=400,
         )
@@ -335,54 +389,26 @@ def _validate_single_upload(
         uploaded_file.size,
         settings.MAX_UPLOAD_MB,
     )
+
     if not size_validation.ok:
         return _json_error(
-            code=getattr(size_validation, "code", "ERR_TOO_LARGE"),
+            code=getattr(
+                size_validation,
+                "code",
+                "ERR_TOO_LARGE",
+            ),
             message=(
                 f"{label}: "
-                f"{getattr(size_validation, 'message', 'Archivo demasiado grande.')}"
+                f"{getattr(
+                    size_validation,
+                    'message',
+                    'Archivo demasiado grande.',
+                )}"
             ),
             status=400,
         )
 
     return None
-
-
-def _parse_selected_requirements(
-    raw_value: str,
-) -> list[int] | None:
-    """
-    Convierte una cadena tipo '1,3,5' en lista de enteros.
-
-    Args:
-        raw_value: Valor recibido desde POST.
-
-    Returns:
-        Lista de números o None cuando no hay selección específica.
-    """
-    clean_value = (raw_value or "").strip()
-    if not clean_value:
-        return None
-
-    selected = []
-
-    for item in clean_value.split(","):
-        clean_item = item.strip()
-        if not clean_item:
-            continue
-
-        try:
-            number = int(clean_item)
-        except ValueError:
-            continue
-
-        if number > 0:
-            selected.append(number)
-
-    if not selected:
-        return None
-
-    return sorted(set(selected))
 
 
 def _json_error(
@@ -395,9 +421,9 @@ def _json_error(
     Construye una respuesta JSON de error estándar.
 
     Args:
-        code: Código de error.
+        code: Código del error.
         message: Mensaje visible.
-        status: HTTP status.
+        status: Estado HTTP.
 
     Returns:
         JsonResponse de error.
@@ -412,7 +438,9 @@ def _json_error(
     )
 
 
-def _bytes_to_stream(content: bytes):
+def _bytes_to_stream(
+    content: bytes,
+) -> BytesIO:
     """
     Convierte bytes a un stream compatible con FileResponse.
 
@@ -420,8 +448,6 @@ def _bytes_to_stream(content: bytes):
         content: Contenido binario.
 
     Returns:
-        BytesIO listo para FileResponse.
+        Stream BytesIO.
     """
-    from io import BytesIO
-
     return BytesIO(content)

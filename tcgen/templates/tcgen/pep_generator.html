@@ -50,7 +50,8 @@ Trazabilidad Técnica:
                 </h1>
                 <p class="upload-sub">
                   Upload the PAP and PDD/FDD documents. The system will extract project data,
-                  identify TO-BE requirements and generate the PEP using the integrated template.
+                  identify the main functional requirements and calculate the testing input
+                  projection before generating the PEP.
                 </p>
               </div>
 
@@ -121,16 +122,11 @@ Trazabilidad Técnica:
                          accept=".pdf,.docx" />
 
                   <p class="help">
-                    Used to detect the TO-BE requirement titles that will be inserted into section 5.1 of the PEP.
+                      Used to identify the main functional requirements and analyze the process
+                      volume required for testing input planning.
                   </p>
                 </div>
               </fieldset>
-
-              <input type="hidden"
-                     id="selectedRequirements"
-                     name="selected_requirements"
-                     value="" />
-
               <div class="cta-wrap" aria-hidden="true"></div>
 
               <div class="cta-row">
@@ -146,10 +142,11 @@ Trazabilidad Técnica:
           <section id="pepPreviewCard" style="display:none;">
             <div class="ready-head">
               <div>
-                <h2 class="ready-title">Review extracted PEP data</h2>
-                  <p class="ready-sub">
-                    Confirm the detected project data and select the TO-BE requirements before downloading the final document.
-                  </p>
+<h2 class="ready-title">Review extracted PEP data</h2>
+<p class="ready-sub">
+  Review the detected project data, functional requirements and testing input
+  projection before downloading the final document.
+</p>
               </div>
 
               <div class="ready-badges">
@@ -199,6 +196,143 @@ Trazabilidad Técnica:
                 <li id="pepTechnologyJustificationText">-</li>
               </ul>
             </div>
+<div class="metric-detail">
+  <div class="metric-detail__title">Functional requirements</div>
+<div
+  id="pepInputProjection"
+  class="metric-detail"
+  hidden>
+
+  <div class="metric-detail__title">
+    Testing input projection
+  </div>
+
+  <p class="help">
+    Estimated test input capacity based on the process volume documented
+    in the PDD/FDD and the defined testing rules.
+  </p>
+
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">Process</div>
+      <div id="pepProcessName" class="metric-value">-</div>
+    </div>
+
+    <div class="metric">
+      <div class="metric-label">Frequency</div>
+      <div id="pepProcessFrequency" class="metric-value">-</div>
+    </div>
+
+    <div class="metric">
+      <div class="metric-label">Normal volume</div>
+      <div id="pepNormalVolume" class="metric-value">-</div>
+    </div>
+
+    <div class="metric">
+      <div class="metric-label">Stress volume · 120%</div>
+      <div id="pepStressVolume" class="metric-value">-</div>
+    </div>
+  </div>
+
+  <div class="metric-detail">
+    <div class="metric-detail__title">
+      Development
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">Phase 1 · 50%</div>
+        <div id="pepDevelopmentPhase1" class="metric-value">-</div>
+      </div>
+
+      <div class="metric">
+        <div class="metric-label">Phase 2 · 50%</div>
+        <div id="pepDevelopmentPhase2" class="metric-value">-</div>
+      </div>
+
+      <div class="metric">
+        <div class="metric-label">Phase 3 · Stress 120%</div>
+        <div id="pepDevelopmentPhase3" class="metric-value">-</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="metric-detail">
+    <div class="metric-detail__title">
+      Deployment scenarios
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">
+          Environment or input change · Stress 120%
+        </div>
+        <div id="pepDeploymentChange" class="metric-value">-</div>
+      </div>
+
+      <div class="metric">
+        <div class="metric-label">
+          Same environment and inputs · Verification 50%
+        </div>
+        <div id="pepDeploymentSame" class="metric-value">-</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="pepCalculationCriterion" class="metric-detail" hidden>
+    <div class="metric-detail__title">
+      Calculation criteria
+    </div>
+
+    <ul class="metric-detail__list">
+      <li id="pepCalculationCriterionText">-</li>
+    </ul>
+  </div>
+</div>
+
+<div
+  id="pepInputProjectionError"
+  class="metric-detail"
+  hidden>
+
+  <div class="metric-detail__title">
+    Testing input projection unavailable
+  </div>
+
+  <p id="pepInputProjectionErrorMessage" class="help">
+    The testing input projection could not be calculated.
+  </p>
+
+  <div id="pepMissingInputData" class="metric-detail" hidden>
+    <div class="metric-detail__title">
+      Missing required data
+    </div>
+
+    <ul
+      id="pepMissingInputDataList"
+      class="metric-detail__list">
+    </ul>
+  </div>
+</div>
+
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">Requirements detected</div>
+      <div id="pepReqTotal" class="metric-value">0</div>
+    </div>
+
+    <div class="metric">
+      <div class="metric-label">Source document</div>
+      <div class="metric-value">PDD / FDD</div>
+    </div>
+  </div>
+
+  <div class="cta-row">
+    <div class="cta-spacer"></div>
+
+    <div class="cta-spacer"></div>
+  </div>
+</div>
 
             <div id="pepWarnings" class="metric-detail" hidden>
               <div class="metric-detail__title">Warnings</div>

@@ -118,7 +118,7 @@ def _build_placeholder_replacements(
         "**Hardware_Requirements": _build_bullet_list(
             pap.requisitos_hardware.items,
         ),
-        "**Titles_requirements_Tobe": _build_tobe_requirement_lines(context),
+        "**Titles_requirements_Tobe": _build_pdd_requirement_lines(context),
     }
 
 
@@ -370,26 +370,31 @@ def _build_bullet_list(items: list[str]) -> str:
     return "\n".join(f"• {item}" for item in cleaned_items)
 
 
-def _build_tobe_requirement_lines(context: PepContext) -> str:
+def _build_pdd_requirement_lines(
+    context: PepContext,
+) -> str:
     """
-    Construye la lista numerada de requerimientos TO-BE.
+    Construye la lista de requerimientos funcionales extraídos del PDD/FDD.
+
+    Los títulos son utilizados exactamente como fueron validados en el
+    análisis del documento, sin agregar numeración adicional.
 
     Args:
         context: Contexto combinado del PEP.
 
     Returns:
-        Texto con requerimientos numerados.
+        Texto con un requerimiento funcional por línea.
     """
-    lines = []
+    requirements = [
+        requirement.strip()
+        for requirement in context.pdd.requerimientos
+        if requirement.strip()
+    ]
 
-    for requirement in context.tobe.requirements:
-        title = _safe_text(requirement.title)
-        lines.append(f"{requirement.number}. {title}")
+    if not requirements:
+        return "No se detectaron requerimientos funcionales."
 
-    if not lines:
-        return "No se detectaron requerimientos TO-BE."
-
-    return "\n".join(lines)
+    return "\n".join(requirements)
 
 def _format_issue_date(current_date: date) -> str:
     """

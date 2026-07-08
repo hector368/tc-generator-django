@@ -42,11 +42,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const reqPid = document.getElementById("reqPid");
   const reqCount = document.getElementById("reqCount");
   const reqPreviewBtn = document.getElementById("reqPreviewBtn");
-  const selectedRequirementsInput = document.getElementById("selectedRequirements");
   const docType = document.getElementById("docType");
   const selCountEl = document.getElementById("selCount");
   // null => “todos”, array => solo esos
-  let selectedReqNums = null;
   let lastPreview = null;
   let analyzeAbort = null;
   // Estado local (evita depender de fileInput.files en drag & drop)
