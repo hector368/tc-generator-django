@@ -405,15 +405,28 @@ def _detect_header(
         )
         if not is_valid:
             return None
-
+    
         req_num = _parse_action_number(num_raw)
-
+    
         max_j = min(i + 1 + _LOOKAHEAD_LINES, len(lines))
         for j in range(i + 1, max_j):
+            # Si aparece otro numero de accion antes de encontrar
+            # "Nombre de la acción", el numero actual probablemente
+            # pertenece a metadatos del encabezado del PDF, por ejemplo:
+            #
+            # Versión
+            # 10
+            # 2.
+            # Nombre de la acción: Obtener EC
+            #
+            # En ese caso, no debemos convertir "10" en requerimiento.
+            if _NUM_ONLY_RE.match(lines[j]):
+                break
+            
             mn = _NAME_LINE_RE.match(lines[j])
             if not mn:
                 continue
-
+            
             tail = (mn.group(1) or "").strip()
             if tail:
                 scenario = _clean_scenario_name(tail)
@@ -421,7 +434,7 @@ def _detect_header(
                 scenario_key_value = _scenario_key(scenario)
                 key = f"{key_value}|{scenario_key_value}"
                 return key, req_num, scenario, (j - i + 1)
-
+    
             has_next_line = j + 1 < len(lines) and lines[j + 1].strip()
             if has_next_line:
                 scenario = _clean_scenario_name(lines[j + 1])
@@ -429,7 +442,7 @@ def _detect_header(
                 scenario_key_value = _scenario_key(scenario)
                 key = f"{key_value}|{scenario_key_value}"
                 return key, req_num, scenario, (j - i + 2)
-
+    
     return None
 
 

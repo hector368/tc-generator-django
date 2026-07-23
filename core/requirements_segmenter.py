@@ -203,6 +203,271 @@ def _hash_step_quality_score(candidate: str) -> tuple[int, int, int]:
     toc_penalty = len(re.findall(r"(?m)\.{10,}\s*\d+\s*$", c))
     return (len(good), median_gap, -toc_penalty)
 
+# Determina si una numeracion contiene un cero inicial.
+def _has_leading_zero_number(
+    raw_number: str,
+) -> bool:
+    """
+    Detecta numeraciones con cero inicial.
+
+    Valores como ``01`` suelen corresponder a metadatos de versión
+    presentes en encabezados de página y no a requerimientos
+    funcionales.
+
+    Args:
+        raw_number: Número extraído del documento.
+
+    Returns:
+        True cuando el número contiene un cero inicial.
+    """
+    clean_number = (
+        raw_number or ""
+    ).strip()
+
+    return (
+        len(clean_number) > 1
+        and clean_number.startswith("0")
+    )
+
+
+# Valida la estructura cercana a un titulo TO-BE numerado.
+def _has_general_description_nearby(
+    lines: list[str],
+    title_line_index: int,
+) -> bool:
+    """
+    Verifica que después del título exista el campo Descripción general.
+
+    Esta validación permite distinguir encabezados reales de
+    requerimientos Beecker frente a números aislados provenientes de
+    versiones, tablas, pasos internos u otros artefactos del documento.
+
+    Args:
+        lines: Líneas del texto TO-BE.
+        title_line_index: Índice de la línea que contiene el título.
+
+    Returns:
+        True cuando se detecta la estructura de descripción general.
+    """
+    nearby_lines = [
+        line.strip()
+        for line in lines[
+            title_line_index + 1:
+            title_line_index + 8
+        ]
+        if line.strip()
+    ]
+
+    nearby_text = " ".join(
+        nearby_lines,
+    )
+
+    return bool(
+        re.search(
+            r"(?i)\bDescripci[oó]n\s+general\s*:",
+            nearby_text,
+        )
+    )
+
+# Segmenta titulos principales numerados dentro de una seccion TO-BE.
+def _segment_by_numbered_tobe_titles(
+    text: str,
+) -> list[RequirementBlock]:
+    """
+    Segmenta requerimientos TO-BE con títulos numerados simplificados.
+
+    Soporta encabezados donde el número y el título aparecen en la
+    misma línea:
+
+        1. Obtener mapa de cargas
+
+    También soporta documentos PDF donde la extracción separa las
+    celdas de la tabla y produce:
+
+        1.
+        Obtener mapa de cargas
+
+    La estrategia valida la presencia cercana del campo
+    ``Descripción general`` para reducir falsos positivos provocados
+    por listas internas, números de versión y metadatos de página.
+
+    Args:
+        text: Texto recortado de la sección TO-BE.
+
+    Returns:
+        Lista de bloques detectados o una lista vacía cuando no existe
+        una secuencia numerada suficientemente confiable.
+    """
+    lines = [
+        line.rstrip()
+        for line in (text or "").split("\n")
+    ]
+
+    candidates: list[
+        tuple[int, int, str]
+    ] = []
+
+    line_index = 0
+
+    while line_index < len(lines):
+        clean_line = lines[
+            line_index
+        ].strip()
+
+        if not clean_line:
+            line_index += 1
+            continue
+
+        inline_match = _STEP_INLINE_RE.match(
+            clean_line,
+        )
+
+        if inline_match:
+            raw_number = inline_match.group(
+                "num",
+            )
+
+            title = inline_match.group(
+                "title",
+            ).strip()
+
+            if (
+                not _has_leading_zero_number(
+                    raw_number,
+                )
+                and not re.match(
+                    (
+                        r"(?i)^Nombre\s+de\s+la\s+"
+                        r"acci[oó]n\s*:"
+                    ),
+                    title,
+                )
+                and _is_valid_numeric_step(
+                    num=int(raw_number),
+                    title=title,
+                )
+                and _has_general_description_nearby(
+                    lines,
+                    line_index,
+                )
+            ):
+                candidates.append(
+                    (
+                        line_index,
+                        int(raw_number),
+                        title,
+                    )
+                )
+
+            line_index += 1
+            continue
+
+        number_only_match = (
+            _STEP_ONLY_NUM_RE.match(
+                clean_line,
+            )
+        )
+
+        if number_only_match:
+            raw_number = (
+                number_only_match.group(
+                    "num",
+                )
+            )
+
+            if _has_leading_zero_number(
+                raw_number,
+            ):
+                line_index += 1
+                continue
+
+            title_line_index = (
+                line_index + 1
+            )
+
+            while (
+                title_line_index < len(lines)
+                and not lines[
+                    title_line_index
+                ].strip()
+            ):
+                title_line_index += 1
+
+            if title_line_index < len(lines):
+                title = lines[
+                    title_line_index
+                ].strip()
+
+                if (
+                    _is_valid_numeric_step(
+                        num=int(raw_number),
+                        title=title,
+                    )
+                    and _has_general_description_nearby(
+                        lines,
+                        title_line_index,
+                    )
+                ):
+                    candidates.append(
+                        (
+                            line_index,
+                            int(raw_number),
+                            title,
+                        )
+                    )
+
+                    line_index = (
+                        title_line_index + 1
+                    )
+
+                    continue
+
+        line_index += 1
+
+    best_run = _pick_best_consecutive_run(
+        candidates,
+    )
+
+    if not best_run:
+        return []
+
+    if (
+        len(best_run) == 1
+        and best_run[0][1] != 1
+    ):
+        return []
+
+    blocks: list[RequirementBlock] = []
+
+    for index, (
+        start_line,
+        requirement_number,
+        title,
+    ) in enumerate(best_run):
+        end_line = (
+            best_run[index + 1][0]
+            if index + 1 < len(best_run)
+            else len(lines)
+        )
+
+        chunk = "\n".join(
+            lines[start_line:end_line]
+        ).strip()
+
+        if not chunk:
+            continue
+
+        blocks.append(
+            RequirementBlock(
+                requirement_number=(
+                    requirement_number
+                ),
+                scenario_name=title,
+                input_text=chunk,
+            )
+        )
+
+    return blocks
 
 # -----------------------------------------------------------------------------
 # API principal
@@ -222,6 +487,7 @@ def segment_requirements_flexible(
 
     Estrategias en orden de prioridad:
     - Estructura TO-BE clasica de la seccion 2.4.
+    - Estructura TO-BE con titulos numerados simplificados.
     - IDs de requerimiento con prefijo y numeracion jerarquica.
     - Pasos con prefijo hash con filtrado de indice.
     - Pasos numerados con criterios estrictos de validacion.
@@ -241,13 +507,46 @@ def segment_requirements_flexible(
 
     # Estrategia 1: estructura TO-BE de la seccion 2.4.
     to_be = slice_to_be_section(text)
+
     if to_be.strip():
-        blocks = split_by_requirement(to_be)
-        if blocks:
+        classic_blocks = split_by_requirement(
+            to_be,
+        )
+
+        classic_format_detected = any(
+            block.scenario_name != "InputText"
+            for block in classic_blocks
+        )
+
+        # Formato clasico Beecker:
+        # "1. Nombre de la acción: ..."
+        if classic_format_detected:
             return SegmentationResult(
-                blocks=blocks,
+                blocks=classic_blocks,
                 context_text=to_be,
-                method="tobe"
+                method="tobe",
+            )
+
+        # Formato nuevo Beecker:
+        # "1. Obtener mapa de cargas"
+        numbered_blocks = _segment_by_numbered_tobe_titles(
+            to_be,
+        )
+
+        if numbered_blocks:
+            return SegmentationResult(
+                blocks=numbered_blocks,
+                context_text=to_be,
+                method="tobe_numbered",
+            )
+
+        # Conserva el comportamiento anterior cuando ninguna estructura
+        # especifica puede ser detectada.
+        if classic_blocks:
+            return SegmentationResult(
+                blocks=classic_blocks,
+                context_text=to_be,
+                method="tobe",
             )
 
     # Estrategia 2: IDs de requerimiento con prefijo jerarquico.

@@ -98,6 +98,7 @@ def build_pep_context_payload(
             "insumo_calculation_status": (
                 context.pdd.calculo_insumos.estado_calculo
             ),
+            "technology_source": "pdd",
         },
     }
 

@@ -77,8 +77,22 @@ Trazabilidad Técnica:
 
                 <div class="field">
                   <div class="label-row">
-                    <label class="label" for="id_document">Upload your PDD document</label>
-                    <span class="required-chip" aria-hidden="true">Required</span>
+                    <label class="label" for="id_document">
+                      Upload your PDD/FDD document
+                    </label>
+
+                    <div style="display:flex; gap:8px; align-items:center;">
+                      <button type="button"
+                              class="req-chip req-chip--ghost"
+                              id="docInfoBtn"
+                              aria-label="View PDD/FDD document requirements">
+                        ⓘ Info
+                      </button>
+
+                      <span class="required-chip" aria-hidden="true">
+                        Required
+                      </span>
+                    </div>
                   </div>
 
                   <div class="uploader">

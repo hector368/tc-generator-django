@@ -121,14 +121,9 @@ def build_insumo_calculation(
             percentage=120,
         ),
         _build_trace(
-            calculation_name="deployment_cambio_entorno_o_insumos",
+            calculation_name="deployment_uat_productivo",
             base_value=stress_base_quantity,
             percentage=120,
-        ),
-        _build_trace(
-            calculation_name="deployment_mismo_entorno_e_insumos",
-            base_value=normal_quantity,
-            percentage=50,
         ),
     ]
 
@@ -136,7 +131,7 @@ def build_insumo_calculation(
         nombre_proceso=context.descripcion_breve_proceso,
         frecuencia=context.calendario_frecuencia,
         unidad_elemento=_resolve_unit(context),
-        insumos_base_periodo_normal=normal_quantity,
+        insumos_base_periodo_normal=ceil(normal_quantity),
         insumos_estres_120=stress_120,
         development=DevelopmentPlanData(
             fase_1=PercentageQuantityData(
@@ -154,21 +149,17 @@ def build_insumo_calculation(
             ),
         ),
         deployment=DeploymentPlanData(
-            cambio_entorno_o_insumos=TypedPercentageQuantityData(
+            uat_productivo=TypedPercentageQuantityData(
                 tipo="estres",
                 porcentaje=120,
                 cantidad=stress_120,
-            ),
-            mismo_entorno_e_insumos=TypedPercentageQuantityData(
-                tipo="verificacion",
-                porcentaje=50,
-                cantidad=phase_50,
             ),
         ),
         trazabilidad_calculos=traces,
         criterio_calculo=_build_calculation_criterion(
             stress_base_name,
         ),
+        nota_deployment=_build_deployment_note(),
     )
 
     return SupplyCalculationData(
@@ -203,7 +194,7 @@ def _get_missing_fields(
 
 
 def _calculate_percentage(
-    base_value: int,
+    base_value: float,
     percentage: int,
 ) -> int:
     """
@@ -215,7 +206,7 @@ def _calculate_percentage(
 
 def _build_trace(
     calculation_name: str,
-    base_value: int,
+    base_value: float,
     percentage: int,
 ) -> CalculationTraceData:
     """
@@ -241,6 +232,17 @@ def _resolve_unit(
     return (
         context.cantidad_periodo_normal.unidad_elemento
         or context.cantidad_periodo_maximo.unidad_elemento
+    )
+
+
+def _build_deployment_note() -> str:
+    """
+    Construye la nota funcional para Deployment/UAT.
+    """
+    return (
+        "Para Deployment/UAT se considera el 120% con insumos "
+        "productivos y entorno productivo. La diferencia aplica cuando "
+        "cambia el tipo de insumos o el entorno utilizado para la ejecución."
     )
 
 

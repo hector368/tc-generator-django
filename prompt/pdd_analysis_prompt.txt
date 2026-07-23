@@ -3,7 +3,8 @@ Actúa como un QA Lead Senior especializado en análisis funcional de documentos
 Analiza integralmente el PDD o FDD proporcionado y realiza dos tareas en una sola ejecución:
 
 1. Extraer los requerimientos funcionales principales que serán utilizados como alcance funcional en un Plan Estratégico de Pruebas (PEP).
-2. Extraer la información operativa y volumétrica del proceso para calcular el plan de insumos de testing.
+2. Extraer la tecnología usada para construir la solución, tomando como fuente principal el PDD/FDD.
+3. Extraer la información operativa y volumétrica del proceso para calcular el plan de insumos de testing.
 
 Analiza exclusivamente el documento proporcionado.
 
@@ -23,18 +24,45 @@ Identifica los requerimientos, acciones o pasos funcionales PRINCIPALES del proc
 
 Estos títulos serán insertados directamente en el PEP.
 
+IMPORTANTE:
+No extraigas encabezados de tablas, encabezados de índice, nombres de columnas, tipos de prueba, secciones generales ni subsecciones internas como requerimientos.
+
+Un requerimiento funcional principal debe representar una acción, funcionalidad o comportamiento específico que será probado.
+
+Devuelve únicamente el título funcional limpio del requerimiento.
+
+No incluyas en la salida final:
+- IDs estructurados del proyecto;
+- prefijos técnicos;
+- claves internas del requerimiento;
+- numeración de sección que no forme parte del nombre funcional.
+
+==================================================
 FORMATOS CONOCIDOS
+==================================================
 
 Los requerimientos normalmente pueden encontrarse en alguno de los siguientes formatos:
 
-A. "2.4 Acciones detalladas del proceso TO-BE"
+--------------------------------------------------
+A. PDD Beecker - "Acciones detalladas del proceso TO-BE"
+--------------------------------------------------
 
-Ejemplo:
+Los requerimientos pueden encontrarse dentro de una sección llamada:
 
-2 - Pantalla inicio móvil sección superior
+"Acciones detalladas del proceso TO-BE"
+
+Esta sección comúnmente puede estar numerada como:
+
+"2.4 Acciones detalladas del proceso TO-BE"
+
+La numeración puede variar o no aparecer. Lo importante es identificar la sección "Acciones detalladas del proceso TO-BE" o una sección equivalente de proceso TO-BE.
+
+Ejemplo de estructura jerárquica:
+
+2 - Pantalla principal
 2.1 - Indicadores
-3 - Pantalla inicio web sección superior
-3.1 - Indicadores web
+3 - Pantalla de consulta
+3.1 - Filtros de búsqueda
 
 En este tipo de estructura existe una jerarquía de requerimientos.
 
@@ -53,105 +81,344 @@ Ejemplos:
 
 Para el ejemplo anterior devuelve únicamente:
 
-"2 - Pantalla inicio móvil sección superior"
-"3 - Pantalla inicio web sección superior"
+"Pantalla principal"
+"Pantalla de consulta"
 
 NO devuelvas:
 
-"2.1 - Indicadores"
-"3.1 - Indicadores web"
+"Indicadores"
+"Filtros de búsqueda"
 
-REGLA CRÍTICA DE JERARQUÍA
+También puede existir el formato:
 
-Cuando exista una estructura numérica jerárquica:
+1. Nombre de la acción: Consultar información
+2. Nombre de la acción: Validar datos
 
-- identifica el nivel funcional principal utilizado dentro de la sección;
-- devuelve únicamente los elementos de ese nivel principal;
-- excluye sus hijos, subrequerimientos, subsecciones y pasos internos;
-- no dividas un requerimiento principal en varios requerimientos debido a sus subniveles.
+En este caso devuelve:
 
-Ejemplo:
+"Consultar información"
+"Validar datos"
 
-4 - Consultar solicitudes
-4.1 - Acceder a SAP
-4.2 - Introducir filtros
-4.2.1 - Validar fecha
+También puede existir el formato numerado:
 
-Devuelve únicamente:
+1. Obtener información de entrada
+Descripción general: ...
 
-"4 - Consultar solicitudes"
+2. Procesar información
+Descripción general: ...
 
-B. "4. Process Steps with screenshots"
+En este caso devuelve:
 
-Los requerimientos pueden comenzar con un identificador estructurado.
+"Obtener información de entrada"
+"Procesar información"
 
-Ejemplo:
+--------------------------------------------------
+B. FDD con identificadores estructurados de requerimiento
+--------------------------------------------------
 
-MCC.026.001 Iniciar ejecución programada del bot
-MCC.026.002 Consultar solicitudes pendientes
-MCC.026.003 Procesar información
+Este formato es común en FDD donde los requerimientos aparecen dentro de tablas o bloques de "Process Steps".
 
-En este formato devuelve los encabezados funcionales completos:
+REGLA CRÍTICA:
+Si el documento contiene identificadores estructurados con el patrón:
 
-"MCC.026.001 Iniciar ejecución programada del bot"
-"MCC.026.002 Consultar solicitudes pendientes"
-"MCC.026.003 Procesar información"
+[PREFIJO].[NNN].[NNN]
 
-No extraigas como requerimientos los pasos, imágenes, validaciones o explicaciones internas que pertenezcan al bloque identificado.
+por ejemplo:
 
-C. "6.2. Process steps" o "6.3. Process steps"
+ABC.001.001
+ABC.001.002
+ABC.001.003
 
-Los requerimientos pueden comenzar con "#" seguido de un número.
+entonces esos identificadores son la fuente principal para detectar requerimientos.
 
-Ejemplo:
+En este formato usa el identificador estructurado únicamente para:
 
-#1 Open SAP Transaction ZGT8
-#2 Enter company information
-#3 Download report
+1. Confirmar que se trata de un requerimiento válido.
+2. Delimitar el bloque del requerimiento.
+3. Diferenciarlo de encabezados de sección, tablas o contenido interno.
+
+PERO:
+No incluyas el identificador estructurado en la salida final.
+
+Extrae solamente el título funcional asociado al identificador.
+
+Ejemplo sintético:
+
+ABC.001.001 Start process
+ABC.001.002 Validate input data
+ABC.001.003 Generate output
 
 Devuelve:
 
-"#1 Open SAP Transaction ZGT8"
-"#2 Enter company information"
-"#3 Download report"
+"Start process"
+"Validate input data"
+"Generate output"
+
+Si el Project ID fue detectado previamente, por ejemplo:
+
+ABC.001
+
+entonces prioriza únicamente los identificadores que comiencen con:
+
+ABC.001.
+
+Ejemplo:
+
+Project ID: ABC.001
+
+IDs válidos:
+
+ABC.001.001
+ABC.001.002
+ABC.001.003
+
+IDs no válidos:
+
+XYZ.999.001
+REQ-01
+4.1
+4.2
+
+No extraigas como requerimientos:
+
+- Encabezados de sección como "4.1 Configurar proceso".
+- Encabezados de tabla como "Step number", "Step description", "Comments".
+- Encabezados de columna como "Input", "Output", "System".
+- Textos como "Pruebas Funcionales".
+- Listas de tipos de prueba.
+- Entradas de tabla de contenido.
+- Pasos internos numerados como "1.:", "2.:", "3.:".
+- Reglas de negocio.
+- Excepciones.
+- Explicaciones internas del bloque.
+- Validaciones subordinadas al requerimiento.
+
+Ejemplo de contenido que NO debe devolverse:
+
+"4.1 Configurar proceso"
+"Pruebas Funcionales"
+"Input"
+"Output"
+"System"
+"Step number"
+"Step description and screenshot"
+"Comments"
+
+Ejemplo de contenido que SÍ debe devolverse:
+
+"Start process"
+"Validate input data"
+"Generate output"
+
+Si un encabezado de sección y un ID estructurado aparecen juntos, el ID estructurado tiene prioridad para identificar el requerimiento, pero la salida final debe incluir solo el nombre funcional.
+
+Ejemplo:
+
+4.1 Configurar proceso
+ABC.001.001 Start process
+
+Devuelve únicamente:
+
+"Start process"
+
+NO devuelvas:
+
+"4.1 Configurar proceso"
+"ABC.001.001 Start process"
+
+--------------------------------------------------
+C. PDD Nestlé - "Process steps"
+--------------------------------------------------
+
+Los requerimientos pueden encontrarse dentro de una sección llamada:
+
+"Process steps"
+
+La sección puede estar numerada, por ejemplo:
+
+"6.2. Process steps"
+"6.3. Process steps"
+
+La numeración puede variar. Lo importante es identificar la sección "Process steps".
+
+En este formato los requerimientos pueden comenzar con "#" seguido de un número.
+
+Ejemplo sintético:
+
+#1 Open source system
+#2 Enter input data
+#3 Generate output
+
+Devuelve:
+
+"Open source system"
+"Enter input data"
+"Generate output"
 
 No conviertas los pasos internos o explicaciones de cada bloque en requerimientos adicionales.
 
+==================================================
 PRIORIDAD DE BÚSQUEDA
+==================================================
 
 Busca en este orden:
 
-1. "Acciones detalladas del proceso TO-BE" o equivalente.
-2. "Process Steps with screenshots" o equivalente.
-3. "6.2. Process steps".
-4. "6.3. Process steps".
-5. Una sección semánticamente equivalente que describa el proceso TO-BE, proceso futuro, requerimientos funcionales o pasos principales de la solución.
+1. Identificadores estructurados de requerimiento con patrón [PREFIJO].[NNN].[NNN].
+2. "Acciones detalladas del proceso TO-BE" o sección equivalente de TO-BE.
+3. "Process steps" o sección equivalente.
+4. Una sección semánticamente equivalente que describa proceso futuro, requerimientos funcionales o pasos principales de la solución.
+
+REGLA DE PRIORIDAD ABSOLUTA:
+
+Si se detectan identificadores estructurados de requerimiento con patrón [PREFIJO].[NNN].[NNN], utiliza esa estructura como fuente principal y NO extraigas encabezados numéricos de sección como 4.1, 4.2, 4.3, etc.
 
 Los nombres de sección anteriores son referencias frecuentes, pero no son un catálogo cerrado.
 
+==================================================
 REGLAS PARA REQUERIMIENTOS
+==================================================
 
 1. Identifica primero la estructura utilizada por el documento.
-2. Una vez identificada la estructura funcional principal, aplica el mismo criterio de extracción a todos los requerimientos de esa sección.
-3. Conserva los títulos en el orden en que aparecen.
-4. Conserva los identificadores o números que formen parte del encabezado.
+2. Si existen identificadores estructurados [PREFIJO].[NNN].[NNN], estos tienen prioridad sobre cualquier encabezado de sección.
+3. Una vez identificada la estructura funcional principal, aplica el mismo criterio de extracción a todos los requerimientos de esa sección.
+4. Conserva el orden en que aparecen.
 5. Conserva el idioma original del título.
-6. Extrae únicamente encabezados funcionales principales.
-7. Excluye subrequerimientos.
-8. Excluye subsecciones.
-9. Excluye pasos internos.
-10. Excluye explicaciones.
-11. Excluye validaciones subordinadas a un requerimiento principal.
-12. Excluye títulos generales del documento.
-13. Excluye AS-IS.
-14. Excluye objetivos, roles, hardware, software, volumetría, cronogramas y entregables.
-15. No dupliques requerimientos.
-16. No inventes requerimientos.
-17. Si existe una jerarquía, selecciona el nivel padre y excluye sus descendientes.
-18. Si no se identifica ninguna sección o estructura funcional válida, devuelve "requerimientos": [] y agrega una advertencia.
+6. Devuelve únicamente el nombre funcional limpio del requerimiento.
+7. No devuelvas IDs estructurados.
+8. No devuelvas numeración de sección.
+9. Extrae únicamente encabezados funcionales principales.
+10. Excluye subrequerimientos.
+11. Excluye subsecciones.
+12. Excluye pasos internos.
+13. Excluye explicaciones.
+14. Excluye validaciones subordinadas a un requerimiento principal.
+15. Excluye títulos generales del documento.
+16. Excluye entradas de tabla de contenido.
+17. Excluye encabezados de tabla.
+18. Excluye nombres de columnas.
+19. Excluye AS-IS.
+20. Excluye objetivos, roles, hardware, software, volumetría, cronogramas y entregables.
+21. Excluye secciones de "Tipos de prueba" o listas de pruebas aplicables.
+22. No dupliques requerimientos.
+23. No inventes requerimientos.
+24. Si existe una jerarquía, selecciona el nivel padre y excluye sus descendientes.
+25. Si no se identifica ninguna sección o estructura funcional válida, devuelve "requerimientos": [] y agrega una advertencia.
 
 ==================================================
-2. EXTRACCIÓN DEL CONTEXTO DEL PROCESO
+REGLAS ESPECÍFICAS PARA FDD CON TABLAS
+==================================================
+
+Cuando el documento tenga tablas dentro de "Process Steps with screenshots" o una sección similar:
+
+1. No uses los encabezados de color como requerimientos.
+2. No uses el número de sección como requerimiento.
+3. No uses encabezados de columna como requerimiento.
+4. No uses "Tipo de prueba" como requerimiento.
+5. No uses "Pruebas Funcionales" como requerimiento.
+6. No uses "Input", "Output" o "System" como requerimiento.
+7. Busca dentro de la tabla líneas con identificadores estructurados.
+8. Usa el identificador estructurado para detectar el requerimiento real.
+9. Devuelve únicamente el título funcional asociado al ID.
+10. El contenido descriptivo debajo del ID pertenece al requerimiento, pero no debe devolverse como título.
+11. Los pasos internos numerados dentro del bloque pertenecen al requerimiento padre y no deben convertirse en requerimientos separados.
+
+Ejemplo sintético:
+
+4.1 Configurar proceso
+ABC.001.001 Start process
+El sistema debe iniciar automáticamente...
+1.: Cargar configuración.
+2.: Registrar inicio.
+Input Output System
+NA NA NA
+
+Devuelve únicamente:
+
+"Start process"
+
+NO devuelvas:
+
+"4.1 Configurar proceso"
+"ABC.001.001 Start process"
+"El sistema debe iniciar automáticamente"
+"1.: Cargar configuración"
+"2.: Registrar inicio"
+"Input"
+"Output"
+"System"
+
+==================================================
+CRITERIO DE VALIDACIÓN FINAL
+==================================================
+
+Antes de devolver la lista final de requerimientos, valida cada elemento:
+
+Un elemento es válido si cumple al menos una de estas condiciones:
+
+1. Es un encabezado principal dentro de "Acciones detalladas del proceso TO-BE".
+2. Es un encabezado principal dentro de "Process steps".
+3. Está asociado a un identificador estructurado con patrón [PREFIJO].[NNN].[NNN] y representa un título funcional.
+4. Es un requerimiento funcional principal claramente distinguible dentro de una sección equivalente.
+
+Un elemento NO es válido si cumple cualquiera de estas condiciones:
+
+1. Es una entrada del índice.
+2. Es un encabezado de tabla.
+3. Es un nombre de columna.
+4. Es una sección general.
+5. Es un subpaso interno.
+6. Es una regla de negocio.
+7. Es una excepción.
+8. Es una explicación.
+9. Es una validación subordinada.
+10. Es un tipo de prueba.
+11. Es un título de sección sin ID estructurado cuando existen IDs estructurados en el documento.
+
+Si después de aplicar estas reglas existen IDs estructurados, usa esos IDs solo para detectar los requerimientos, pero devuelve exclusivamente el nombre funcional limpio de cada requerimiento.
+
+==================================================
+2. EXTRACCIÓN DE TECNOLOGÍA
+==================================================
+
+Extrae la tecnología desde el PDD/FDD.
+
+La tecnología corresponde a la herramienta, plataforma, framework, producto o entorno con el que se creó el flujo, RPA, bot, automatización o aplicación del proyecto.
+
+Busca principalmente en secciones técnicas, arquitectura, alcance, descripción de solución, prerrequisitos, herramientas utilizadas, diagramas, tablas de tecnologías, plataformas, entorno de ejecución o menciones directas dentro del PDD/FDD.
+
+Reglas obligatorias:
+
+1. No uses el PAP como fuente de tecnología.
+2. No confundas el tipo de solución con la tecnología utilizada.
+3. Términos como "RPA", "automatización", "bot", "flujo automatizado", "proceso automatizado", "aplicación" o "sistema" describen la solución, pero NO son suficientes por sí solos para llenar tecnologia.valor.
+4. La mayoría de las tecnologías con las que se trabaja son:
+   - UiPath
+   - Blue Prism
+   - ServiceNow
+   - Power Automate Cloud
+   - Power Automate Desktop
+   - Automation Anywhere
+   - PowerApp
+5. La lista anterior es una guía de tecnologías comunes, pero no es un catálogo cerrado. Si el PDD/FDD menciona claramente otra herramienta, plataforma o tecnología real usada para construir la solución, puedes devolverla.
+6. Usa "explicita" cuando la tecnología aparezca directamente escrita en el PDD/FDD.
+7. Usa "inferida" únicamente cuando la tecnología pueda deducirse con evidencia clara del propio PDD/FDD.
+8. Si el documento solo menciona términos genéricos y no hay evidencia de una herramienta o plataforma específica, devuelve tecnología no encontrada.
+9. No devuelvas valores genéricos como "RPA", "Bot", "Automatización", "Aplicación", "Sistema", "IA", "Software" o similares en tecnologia.valor.
+10. Si aparecen varias tecnologías y el documento indica claramente que se usaron en el proyecto, devuelve los nombres separados por " / ".
+11. Si aparecen varias tecnologías pero no queda claro cuál se usó para construir la solución, devuelve no encontrada.
+12. Si no existe evidencia suficiente, devuelve exactamente:
+   - "valor": null
+   - "tipo_deteccion": "no_encontrada"
+   - "justificacion": null
+
+Ejemplos:
+
+- Si el PDD/FDD dice "Power App", "Power Apps" o "PowerApp", devuelve "PowerApp" con tipo_deteccion "explicita".
+- Si el PDD/FDD dice "Power Automate Desktop", devuelve "Power Automate Desktop" con tipo_deteccion "explicita".
+- Si el PDD/FDD dice "ServiceNow" como sistema/plataforma usada por la solución, devuelve "ServiceNow" con tipo_deteccion "explicita".
+
+==================================================
+3. EXTRACCIÓN DEL CONTEXTO DEL PROCESO
 ==================================================
 
 Extrae la siguiente información:
@@ -212,7 +479,7 @@ Debe devolver:
 Si existen varias cantidades y no puedes identificar cuál corresponde al periodo normal o máximo, devuelve null para el campo ambiguo y agrega una advertencia.
 
 ==================================================
-3. VALIDACIÓN DEL CÁLCULO DE INSUMOS
+4. VALIDACIÓN DEL CÁLCULO DE INSUMOS
 ==================================================
 
 Antes de realizar cálculos valida estos tres campos obligatorios:
@@ -238,7 +505,7 @@ Utiliza este mensaje:
 Aunque falle el cálculo de insumos, devuelve normalmente los requerimientos encontrados.
 
 ==================================================
-4. REGLAS DE CÁLCULO DE INSUMOS
+5. REGLAS DE CÁLCULO DE INSUMOS
 ==================================================
 
 Realiza los cálculos únicamente cuando estén disponibles los tres campos obligatorios.
@@ -284,19 +551,16 @@ Fase 2:
 Fase 3:
 120% de la base de estrés.
 
-DEPLOYMENT
+DEPLOYMENT / UAT
 
-Devuelve siempre dos posibles escenarios.
+Devuelve únicamente un resultado para Deployment/UAT.
 
-Cambio de entorno o naturaleza de insumos:
+Deployment/UAT:
 120% de la base de estrés.
 
-Mismo entorno e insumos:
-50% del periodo normal.
+Este resultado debe considerar insumos productivos y entorno productivo.
 
-No determines cuál escenario de Deployment aplica.
-
-El tester seleccionará el escenario correspondiente.
+Agrega una nota indicando que para Deployment/UAT se considera el 120% con insumos productivos y entorno productivo, y que la diferencia aplica cuando cambia el tipo de insumos o el entorno utilizado para la ejecución.
 
 REDONDEO
 
@@ -332,6 +596,11 @@ ESTRUCTURA OBLIGATORIA DE SALIDA
 
 {
   "estado_analisis": "completado",
+  "tecnologia": {
+    "valor": null,
+    "tipo_deteccion": "no_encontrada",
+    "justificacion": null
+  },
   "requerimientos": [],
   "contexto_proceso": {
     "descripcion_breve_proceso": null,
@@ -372,14 +641,9 @@ ESTRUCTURA OBLIGATORIA DE SALIDA
         }
       },
       "deployment": {
-        "cambio_entorno_o_insumos": {
+        "uat_productivo": {
           "tipo": "estres",
           "porcentaje": 120,
-          "cantidad": 0
-        },
-        "mismo_entorno_e_insumos": {
-          "tipo": "verificacion",
-          "porcentaje": 50,
           "cantidad": 0
         }
       },
@@ -392,7 +656,8 @@ ESTRUCTURA OBLIGATORIA DE SALIDA
           "resultado_final": 0
         }
       ],
-      "criterio_calculo": null
+      "criterio_calculo": null,
+      "nota_deployment": null
     }
   },
   "advertencias": []

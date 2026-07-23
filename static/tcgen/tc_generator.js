@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const fileUiBtn = document.getElementById("fileUiBtn");
   const uploadOrb = document.getElementById("uploadOrb");
   const fileHint = document.getElementById("fileHint");
+  const docInfoBtn = document.getElementById("docInfoBtn");
 
   const filePill = document.getElementById("filePill");
   const fileNameEl = document.getElementById("fileName");
@@ -44,7 +45,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const reqPreviewBtn = document.getElementById("reqPreviewBtn");
   const docType = document.getElementById("docType");
   const selCountEl = document.getElementById("selCount");
-  // null => “todos”, array => solo esos
+
+  const selectedRequirementsInput = document.getElementById(
+    "selectedRequirements"
+  );
+
+  // null => todos los requerimientos.
+  // array => solo los numeros seleccionados.
+  let selectedReqNums = null;
+
   let lastPreview = null;
   let analyzeAbort = null;
   // Estado local (evita depender de fileInput.files en drag & drop)
@@ -355,11 +364,26 @@ function openReqModal(preview) {
 
 
 function getDocTypeLabel(method) {
-  const m = String(method || "").trim().toLowerCase();
-  if (!m) return "Undetermined";
-  if (m === "tobe") return "PDD Beecker";
+  const normalizedMethod = String(
+    method || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  if (!normalizedMethod) {
+    return "Undetermined";
+  }
+
+  if (
+    normalizedMethod === "tobe"
+    || normalizedMethod === "tobe_numbered"
+  ) {
+    return "PDD Beecker";
+  }
+
   return "External FDD";
 }
+
   async function analyzeDocument(file) {
     if (!form) return;
     const analyzeUrl = form.dataset.analyzeUrl;
@@ -433,6 +457,168 @@ function cleanRequirementTitle(title, number) {
     const v = (assignedInput?.value || "").trim();
     return v || null;
   }
+
+
+function openDocumentInfoModal() {
+  Swal.fire({
+    icon: "info",
+    title: "PDD/FDD document requirements",
+    html: `
+      <div class="tc-doc-modal">
+        <p class="tc-doc-modal__subtitle">
+          Process Definition Document (PDD) /
+          Functional Design Document (FDD)
+        </p>
+
+        <p>
+          The generator analyzes the document structure to identify
+          each main requirement and split its related content into
+          independent blocks before generating test cases.
+        </p>
+
+        <h3>Supported document structures</h3>
+
+        <div class="tc-doc-formats">
+          <section class="tc-doc-format">
+            <h4>Beecker PDD</h4>
+
+            <p>
+              Requirements are detected inside the
+              <strong>Acciones detalladas del proceso TO-BE</strong>
+              section. The section is commonly numbered as
+              <strong>2.4</strong>, but the section number is optional.
+            </p>
+
+            <div class="tc-doc-example">
+              <span>Classic format</span>
+
+              <pre>2.4 Acciones detalladas del proceso TO-BE
+
+1. Nombre de la acción: Consultar información
+Descripción general: ...
+
+2. Nombre de la acción: Validar datos
+Descripción general: ...</pre>
+            </div>
+
+            <div class="tc-doc-example">
+              <span>Numbered format</span>
+
+              <pre>2.4 Acciones detalladas del proceso TO-BE
+
+1. Obtener información de entrada
+Descripción general: ...
+
+2. Procesar información
+Descripción general: ...</pre>
+            </div>
+          </section>
+
+          <section class="tc-doc-format">
+            <h4>Nestlé PDD</h4>
+
+            <p>
+              Requirements are detected inside a
+              <strong>Process steps</strong> section. The section number
+              may vary, and each numbered hash heading starts a new
+              requirement block.
+            </p>
+
+            <div class="tc-doc-example">
+              <span>Example</span>
+
+              <pre>6.2. Process steps
+
+#1 Open source system
+Requirement content...
+
+#2 Enter input data
+Requirement content...
+
+#3 Generate output
+Requirement content...</pre>
+            </div>
+          </section>
+
+          <section class="tc-doc-format">
+            <h4>Heineken FDD</h4>
+
+            <p>
+              Requirements are detected from structured requirement IDs.
+              A specific section title is not required. Each recognized ID
+              identifies the beginning of a new requirement block.
+            </p>
+
+            <div class="tc-doc-example">
+              <span>Example</span>
+
+              <pre>PRJ.001.001 Start process
+Requirement content...
+
+PRJ.001.002 Validate input data
+Requirement content...
+
+PRJ.001.003 Generate output
+Requirement content...</pre>
+            </div>
+          </section>
+        </div>
+
+        <h3>Required content</h3>
+
+        <ul>
+          <li>
+            A project ID identifiable in the document or file name.
+          </li>
+
+          <li>
+            Clear and consistently structured main requirement headings.
+          </li>
+
+          <li>
+            A clear title for each main requirement.
+          </li>
+
+          <li>
+            The descriptions, validations, tables, and process details
+            related to a requirement should appear before the next main
+            requirement heading.
+          </li>
+        </ul>
+
+        <h3>Important</h3>
+
+        <ul>
+          <li>
+            Use the same heading structure consistently throughout the
+            functional section.
+          </li>
+
+          <li>
+            Internal steps should remain inside their parent requirement
+            unless they are intended to be processed as independent
+            test scope.
+          </li>
+
+          <li>
+            Duplicated or ambiguous headings may reduce requirement
+            detection accuracy.
+          </li>
+
+          <li>
+            If no supported structure can be detected reliably, the
+            document may not be segmented into individual requirements
+            correctly.
+          </li>
+        </ul>
+      </div>
+    `,
+    confirmButtonText: "Close",
+    width: "min(900px, 94vw)",
+    allowOutsideClick: true,
+    allowEscapeKey: true,
+  });
+}
 
   // -----------------------------
   // SweetAlert2 notifier (Toast + Modal)
@@ -741,8 +927,17 @@ if (readyCard) show(readyCard);
     if (selectedFile) analyzeDocument(selectedFile);
   }
 
-  if (fileUiBtn && fileInput) fileUiBtn.addEventListener("click", () => fileInput.click());
-  if (uploadOrb && fileInput) uploadOrb.addEventListener("click", () => fileInput.click());
+  if (docInfoBtn) {
+    docInfoBtn.addEventListener("click", openDocumentInfoModal);
+  }
+
+  if (fileUiBtn && fileInput) {
+    fileUiBtn.addEventListener("click", () => fileInput.click());
+  }
+
+  if (uploadOrb && fileInput) {
+    uploadOrb.addEventListener("click", () => fileInput.click());
+  }
 
   if (fileInput) {
     fileInput.addEventListener("change", () => {

@@ -3,23 +3,24 @@
 Trazabilidad Técnica:
 - PEP-WEB-001: Pantalla independiente para generación de PEP.
 - PEP-WEB-002: Carga de documentos PAP y PDD/FDD.
-- PEP-WEB-003: Preview de información extraída y selección TO-BE.
+- PEP-WEB-003: Revisión de información extraída y proyección de insumos.
 - PEP-WEB-004: Descarga de PEP generado en formato DOCX.
 -->
 <!doctype html>
-<html lang="es-MX">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Beecker | PEP Generator</title>
+  
 
   <link rel="icon" href="{% static 'tcgen/img/favicon.ico' %}" type="image/x-icon" />
   <link rel="stylesheet" href="{% static 'tcgen/style.css' %}" />
 </head>
-<body>
+<body class="pep-page">
   <noscript>
     <div class="noscript-warning">
-      Este sitio requiere JavaScript para generar el PEP.
+      JavaScript is required to analyze documents and generate the PEP.
     </div>
   </noscript>
 
@@ -28,343 +29,390 @@ Trazabilidad Técnica:
       <img src="{% static 'tcgen/img/b-logo.png' %}" alt="Beecker" />
     </div>
 
-    <div class="bh-center">
-      <div class="bh-title">PEP Generator</div>
-    </div>
+<div class="bh-center">
+  <div class="bh-title">PEP Generator</div>
+  <div class="bh-subtitle">Plan Estratégico de Pruebas</div>
+</div>
 
     <div class="bh-right">
-      <img src="{% static 'tcgen/img/logo.png' %}" alt="Logo" />
+      <img src="{% static 'tcgen/img/logo.png' %}" alt="Beecker logo" />
     </div>
   </header>
 
-  <main class="page">
+  <main class="page pep-main">
     <div class="page-inner">
-      <section class="card large-card">
-        <div class="card-inner">
-
-          <section aria-labelledby="pepUploadTitle">
-            <div class="upload-head">
-              <div>
-                <h1 id="pepUploadTitle" class="upload-title">
-                  Generate PEP (Plan Estratégico de Pruebas)
-                </h1>
-                <p class="upload-sub">
-                  Upload the PAP and PDD/FDD documents. The system will extract project data,
-                  identify the main functional requirements and calculate the testing input
-                  projection before generating the PEP.
-                </p>
-              </div>
-
-              <div class="upload-badges" aria-label="Formats and flow">
-                <a class="badge-mini" href="{% url 'tcgen_home' %}">
-                  ← Test Case Generator
-                </a>
-                <div class="badge-mini">
-                  📄 <span>PDF / DOCX</span>
-                </div>
-                <div class="badge-mini">
-                  🧾 <span>Integrated PEP template</span>
-                </div>
-              </div>
+      <section class="pep-workspace" aria-labelledby="pepUploadTitle">
+        <div class="pep-upload-panel">
+          <div class="pep-page-heading">
+            <div class="pep-heading-copy">
+              <p class="pep-eyebrow">Strategic Test Plan</p>
+              <h1 id="pepUploadTitle" class="pep-page-title">
+                Generate PEP
+              </h1>
+              <p class="pep-page-description">
+                Upload the PAP and PDD/FDD documents. The system extracts the project data,
+                identifies the main functional requirements, and calculates the testing input
+                plan before generating the final PEP.
+              </p>
             </div>
 
-            <div class="hr" aria-hidden="true"></div>
+            <div class="pep-heading-actions" aria-label="PEP generator navigation and formats">
+              <a class="pep-back-link" href="{% url 'tcgen_home' %}">
+                <span aria-hidden="true">←</span>
+                Test Case Generator
+              </a>
+              <span class="pep-format-badge">
+                PDF / DOCX
+              </span>
+            </div>
+          </div>
 
-            <form id="pepForm"
-                  method="post"
-                  enctype="multipart/form-data"
-                  data-preview-url="{% url 'tcgen_pep_preview' %}"
-                  data-generate-url="{% url 'tcgen_pep_generate' %}">
-              {% csrf_token %}
+          <form id="pepForm"
+                method="post"
+                enctype="multipart/form-data"
+                data-preview-url="{% url 'tcgen_pep_preview' %}"
+                data-generate-url="{% url 'tcgen_pep_generate' %}"
+                novalidate>
+            {% csrf_token %}
 
-              <fieldset class="form-section" aria-labelledby="papLegend">
-                <legend id="papLegend" class="section-legend">PAP Document</legend>
+            <div class="pep-document-grid">
+              <fieldset class="pep-document-card">
+                <legend id="papLegend" class="pep-document-legend">
+                  <span class="pep-step-number" aria-hidden="true">01</span>
+                  PAP document
+                  <span class="pep-required-label">Required</span>
+                </legend>
 
-                <div class="field">
-                  <div class="label-row">
-                    <label class="label" for="id_pap_document">Upload PAP document</label>
-                    <div style="display:flex; gap:8px; align-items:center;">
-                      <button type="button" class="req-chip req-chip--ghost" id="papInfoBtn">
-                        ⓘ Info
-                      </button>
-                      <span class="required-chip" aria-hidden="true">Required</span>
-                    </div>
-                  </div>
+                <div class="pep-document-copy">
+                  <p>
+                    Project and technical information used to complete the PEP.
+                  </p>
+                  <button type="button"
+                          class="pep-info-button"
+                          id="papInfoBtn"
+                          aria-label="View PAP document requirements">
+                    What is required?
+                  </button>
+                </div>
 
+                <div class="pep-file-picker">
                   <input id="id_pap_document"
+                         class="pep-file-input"
                          name="pap_document"
                          type="file"
-                         accept=".pdf,.docx" />
+                         accept=".pdf,.docx"
+                         required
+                         aria-describedby="papHelp papFileName" />
 
-                  <p class="help">
-                    Used to extract project name, client, technology, roles, software requirements and hardware requirements.
-                  </p>
+                  <label class="pep-file-control"
+                         id="papDropZone"
+                         for="id_pap_document">
+                    <span class="pep-file-icon" aria-hidden="true">📄</span>
+                    <span class="pep-file-copy">
+                      <strong id="papFileName"
+                              class="pep-file-name"
+                              aria-live="polite">No file selected</strong>
+                      <span class="pep-file-meta">PDF or DOCX · Drag and drop</span>
+                    </span>
+                    <span class="pep-file-button">Choose file</span>
+                  </label>
                 </div>
+
+                <p id="papHelp" class="pep-field-help">
+                  Extracts the project name, client, technology, roles, software requirements,
+                  and hardware requirements.
+                </p>
               </fieldset>
 
-              <fieldset class="form-section" aria-labelledby="pddLegend">
-                <legend id="pddLegend" class="section-legend">PDD/FDD Document</legend>
+              <fieldset class="pep-document-card">
+                <legend id="pddLegend" class="pep-document-legend">
+                  <span class="pep-step-number" aria-hidden="true">02</span>
+                  PDD/FDD document
+                  <span class="pep-required-label">Required</span>
+                </legend>
 
-                <div class="field">
-                  <div class="label-row">
-                    <label class="label" for="id_pdd_document">Upload PDD/FDD document</label>
-                      <div style="display:flex; gap:8px; align-items:center;">
-                      <button type="button" class="req-chip req-chip--ghost" id="pddInfoBtn">
-                        ⓘ Info
-                      </button>
-                      <span class="required-chip" aria-hidden="true">Required</span>
-                    </div>
-                  </div>
+                <div class="pep-document-copy">
+                  <p>
+                    Functional and process-volume information used for test planning.
+                  </p>
+                  <button type="button"
+                          class="pep-info-button"
+                          id="pddInfoBtn"
+                          aria-label="View PDD or FDD document requirements">
+                    What is required?
+                  </button>
+                </div>
 
+                <div class="pep-file-picker">
                   <input id="id_pdd_document"
+                         class="pep-file-input"
                          name="pdd_document"
                          type="file"
-                         accept=".pdf,.docx" />
+                         accept=".pdf,.docx"
+                         required
+                         aria-describedby="pddHelp pddFileName" />
 
-                  <p class="help">
-                      Used to identify the main functional requirements and analyze the process
-                      volume required for testing input planning.
-                  </p>
+                  <label class="pep-file-control"
+                         id="pddDropZone"
+                         for="id_pdd_document">
+                    <span class="pep-file-icon" aria-hidden="true">📄</span>
+                    <span class="pep-file-copy">
+                      <strong id="pddFileName"
+                              class="pep-file-name"
+                              aria-live="polite">No file selected</strong>
+                      <span class="pep-file-meta">PDF or DOCX · Drag and drop</span>
+                    </span>
+                    <span class="pep-file-button">Choose file</span>
+                  </label>
                 </div>
+
+                <p id="pddHelp" class="pep-field-help">
+                  Identifies the main functional requirements and analyzes the process volume
+                  required to calculate the testing input plan.
+                </p>
               </fieldset>
-              <div class="cta-wrap" aria-hidden="true"></div>
+            </div>
 
-              <div class="cta-row">
-                <div class="cta-spacer"></div>
-                <button class="btn btn-primary" type="button" id="previewBtn">
-                  Analyze documents
-                </button>
-                <div class="cta-spacer"></div>
-              </div>
-            </form>
-          </section>
+            <div class="pep-form-actions">
+              <button class="btn btn-primary" type="submit" id="previewBtn">
+                Generate PEP
+              </button>
+            </div>
+          </form>
+        </div>
 
-          <section id="pepPreviewCard" style="display:none;">
-            <div class="ready-head">
+        <section id="pepPreviewCard"
+                 class="pep-results"
+                 aria-labelledby="pepResultsTitle"
+                 tabindex="-1"
+                 hidden>
+          <div class="pep-result-header">
+            <div class="pep-result-status">
+              <span class="pep-status-icon" aria-hidden="true">✓</span>
               <div>
-<h2 class="ready-title">Review extracted PEP data</h2>
-<p class="ready-sub">
-  Review the detected project data, functional requirements and testing input
-  projection before downloading the final document.
-</p>
-              </div>
-
-              <div class="ready-badges">
-                <div class="badge-mini">
-                  📄 File name: <span id="pepFilename">PEP.docx</span>
-                </div>
+                <p class="pep-eyebrow">Document analysis</p>
+                <h2 id="pepResultsTitle" class="pep-result-title">
+                  Analysis complete
+                </h2>
+                <p class="pep-result-description">
+                  Review the extracted project data and testing input plan before generating
+                  the final PEP.
+                </p>
               </div>
             </div>
 
-            <div class="hr" aria-hidden="true"></div>
-
-            <div class="metrics">
-              <div class="metric">
-                <div class="metric-label">Project ID</div>
-                <div id="pepProjectId" class="metric-value">-</div>
+            <div class="pep-result-meta" aria-label="Analysis summary">
+              <div class="pep-output-file pep-result-meta-item">
+                <span>Output file</span>
+                <strong id="pepFilename">PEP.docx</strong>
               </div>
 
-              <div class="metric">
-                <div class="metric-label">Client</div>
-                <div id="pepClient" class="metric-value">-</div>
+              <div class="pep-execution-cost pep-result-meta-item">
+                <span>Execution cost</span>
+                <strong id="pepExecutionCost">-</strong>
               </div>
-            
-              <div class="metric">
-                <div class="metric-label">Technology</div>
-                <div id="pepTechnology" class="metric-value">-</div>
-              </div>
-            
-              <div class="metric">
-                <div class="metric-label">Technology detection</div>
-                <div id="pepDetectionType" class="metric-value">-</div>
-              </div>
-            
-              <div class="metric">
-                <div class="metric-label">Total cost (USD)</div>
-                <div id="pepCost" class="metric-value">$0.00</div>
-              </div>
-            
-              <div class="metric">
-                <div class="metric-label">Generated file</div>
-                <div id="pepFilenameMetric" class="metric-value">PEP.docx</div>
+            </div>
+          </div>
+
+          <section class="pep-result-section" aria-labelledby="pepProjectOverviewTitle">
+            <div class="pep-section-heading">
+              <div>
+                <h3 id="pepProjectOverviewTitle">Project overview</h3>
+                <p>Confirm that the key project data matches the source documents.</p>
               </div>
             </div>
 
-            <div id="pepTechnologyJustification" class="metric-detail" hidden>
-              <div class="metric-detail__title">Technology detection justification</div>
-              <ul class="metric-detail__list">
-                <li id="pepTechnologyJustificationText">-</li>
-              </ul>
-            </div>
-<div class="metric-detail">
-  <div class="metric-detail__title">Functional requirements</div>
-<div
-  id="pepInputProjection"
-  class="metric-detail"
-  hidden>
-
-  <div class="metric-detail__title">
-    Testing input projection
-  </div>
-
-  <p class="help">
-    Estimated test input capacity based on the process volume documented
-    in the PDD/FDD and the defined testing rules.
-  </p>
-
-  <div class="metrics">
-    <div class="metric">
-      <div class="metric-label">Process</div>
-      <div id="pepProcessName" class="metric-value">-</div>
-    </div>
-
-    <div class="metric">
-      <div class="metric-label">Frequency</div>
-      <div id="pepProcessFrequency" class="metric-value">-</div>
-    </div>
-
-    <div class="metric">
-      <div class="metric-label">Normal volume</div>
-      <div id="pepNormalVolume" class="metric-value">-</div>
-    </div>
-
-    <div class="metric">
-      <div class="metric-label">Stress volume · 120%</div>
-      <div id="pepStressVolume" class="metric-value">-</div>
-    </div>
-  </div>
-
-  <div class="metric-detail">
-    <div class="metric-detail__title">
-      Development
-    </div>
-
-    <div class="metrics">
-      <div class="metric">
-        <div class="metric-label">Phase 1 · 50%</div>
-        <div id="pepDevelopmentPhase1" class="metric-value">-</div>
-      </div>
-
-      <div class="metric">
-        <div class="metric-label">Phase 2 · 50%</div>
-        <div id="pepDevelopmentPhase2" class="metric-value">-</div>
-      </div>
-
-      <div class="metric">
-        <div class="metric-label">Phase 3 · Stress 120%</div>
-        <div id="pepDevelopmentPhase3" class="metric-value">-</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="metric-detail">
-    <div class="metric-detail__title">
-      Deployment scenarios
-    </div>
-
-    <div class="metrics">
-      <div class="metric">
-        <div class="metric-label">
-          Environment or input change · Stress 120%
-        </div>
-        <div id="pepDeploymentChange" class="metric-value">-</div>
-      </div>
-
-      <div class="metric">
-        <div class="metric-label">
-          Same environment and inputs · Verification 50%
-        </div>
-        <div id="pepDeploymentSame" class="metric-value">-</div>
-      </div>
-    </div>
-  </div>
-
-  <div id="pepCalculationCriterion" class="metric-detail" hidden>
-    <div class="metric-detail__title">
-      Calculation criteria
-    </div>
-
-    <ul class="metric-detail__list">
-      <li id="pepCalculationCriterionText">-</li>
-    </ul>
-  </div>
-</div>
-
-<div
-  id="pepInputProjectionError"
-  class="metric-detail"
-  hidden>
-
-  <div class="metric-detail__title">
-    Testing input projection unavailable
-  </div>
-
-  <p id="pepInputProjectionErrorMessage" class="help">
-    The testing input projection could not be calculated.
-  </p>
-
-  <div id="pepMissingInputData" class="metric-detail" hidden>
-    <div class="metric-detail__title">
-      Missing required data
-    </div>
-
-    <ul
-      id="pepMissingInputDataList"
-      class="metric-detail__list">
-    </ul>
-  </div>
-</div>
-
-  <div class="metrics">
-    <div class="metric">
-      <div class="metric-label">Requirements detected</div>
-      <div id="pepReqTotal" class="metric-value">0</div>
-    </div>
-
-    <div class="metric">
-      <div class="metric-label">Source document</div>
-      <div class="metric-value">PDD / FDD</div>
-    </div>
-  </div>
-
-  <div class="cta-row">
-    <div class="cta-spacer"></div>
-
-    <div class="cta-spacer"></div>
-  </div>
-</div>
-
-            <div id="pepWarnings" class="metric-detail" hidden>
-              <div class="metric-detail__title">Warnings</div>
-              <ul id="pepWarningsList" class="metric-detail__list"></ul>
-            </div>
-
-
-
-            <div class="hr" aria-hidden="true"></div>
-
-            <div class="cta-row">
-              <div class="cta-spacer"></div>
-              <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
-                <button class="btn btn-secondary" type="button" id="viewJsonBtn">
-                  View JSON
-                </button>
-              
-                <button class="btn btn-secondary" type="button" id="generatePepBtn">
-                  Generate and download PEP
-                </button>
+            <dl class="pep-project-summary">
+              <div class="pep-project-item pep-project-item--wide">
+                <dt>Project name</dt>
+                <dd id="pepProjectName">-</dd>
               </div>
-              <div class="cta-spacer"></div>
+
+              <div class="pep-project-item">
+                <dt>Project ID</dt>
+                <dd id="pepProjectId">-</dd>
+              </div>
+
+              <div class="pep-project-item">
+                <dt>Client</dt>
+                <dd id="pepClient">-</dd>
+              </div>
+
+              <div class="pep-project-item pep-project-item--wide">
+                <dt>Technology</dt>
+                <dd class="pep-technology-value">
+                  <span id="pepTechnology">-</span>
+                  <span id="pepDetectionType" class="pep-inline-status" hidden>-</span>
+                </dd>
+              </div>
+            </dl>
+
+            <aside id="pepTechnologyJustification"
+                   class="pep-context-note"
+                   aria-labelledby="pepTechnologyJustificationTitle"
+                   hidden>
+              <strong id="pepTechnologyJustificationTitle">
+                Technology detection note
+              </strong>
+              <p id="pepTechnologyJustificationText">-</p>
+            </aside>
+          </section>
+
+          <section class="pep-requirements-summary"
+                   aria-labelledby="pepRequirementsTitle">
+            <div class="pep-requirements-copy">
+              <span class="pep-requirements-count" id="pepReqTotal">0</span>
+              <div>
+                <h3 id="pepRequirementsTitle">Functional requirements detected</h3>
+                <p>
+                  The detected main requirements will be included automatically in the PEP.
+                </p>
+              </div>
+            </div>
+
+            <button class="btn btn-tertiary"
+                    type="button"
+                    id="viewRequirementsBtn">
+              Review requirements
+            </button>
+          </section>
+
+          <section id="pepInputProjection"
+                   class="pep-result-section"
+                   aria-labelledby="pepInputProjectionTitle"
+                   hidden>
+            <div class="pep-section-heading">
+              <div>
+                <h3 id="pepInputProjectionTitle">Testing input plan</h3>
+                <p>
+                  Recommended input volumes calculated from the process volume documented
+                  in the PDD/FDD and the defined testing rules.
+                </p>
+              </div>
+            </div>
+
+            <div class="pep-process-summary">
+              <div class="pep-process-item pep-process-item--wide">
+                <span>Process</span>
+                <strong id="pepProcessName">-</strong>
+              </div>
+
+              <div class="pep-process-item">
+                <span>Frequency</span>
+                <strong id="pepProcessFrequency">-</strong>
+              </div>
+
+              <div class="pep-process-item">
+                <span>Base volume</span>
+                <strong id="pepNormalVolume">-</strong>
+              </div>
+            </div>
+
+            <div class="pep-table-wrapper" tabindex="0" aria-label="Scrollable testing input plan">
+              <table class="pep-plan-table">
+                <caption class="visually-hidden">
+                  Testing input projection by stage and phase.
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Stage</th>
+                    <th scope="col">Phases</th>
+                    <th scope="col">Specifications</th>
+                    <th scope="col">Input Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Development</td>
+                    <td>Phase 1</td>
+                    <td>50% of base volume</td>
+                    <td id="pepDevelopmentPhase1">-</td>
+                  </tr>
+                  <tr>
+                    <td>Development</td>
+                    <td>Phase 2</td>
+                    <td>50% of base volume</td>
+                    <td id="pepDevelopmentPhase2">-</td>
+                  </tr>
+                  <tr>
+                    <td>Development</td>
+                    <td>Phase 3</td>
+                    <td>Stress test · 120%</td>
+                    <td id="pepDevelopmentPhase3">-</td>
+                  </tr>
+                  <tr>
+                    <td>Deployment</td>
+                    <td>Environment or input change</td>
+                    <td>Stress test · 120%</td>
+                    <td id="pepDeploymentChange">-</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <aside id="pepCalculationCriterion"
+                   class="pep-context-note"
+                   aria-labelledby="pepCalculationCriterionTitle"
+                   hidden>
+              <strong id="pepCalculationCriterionTitle">Calculation note</strong>
+              <p id="pepCalculationCriterionText">-</p>
+            </aside>
+          </section>
+
+          <section id="pepInputProjectionError"
+                   class="pep-alert pep-alert--error"
+                   role="alert"
+                   hidden>
+            <div class="pep-alert-icon" aria-hidden="true">!</div>
+            <div>
+              <h3>Testing input plan unavailable</h3>
+              <p id="pepInputProjectionErrorMessage">
+                The testing input plan could not be calculated.
+              </p>
+
+              <div id="pepMissingInputData" class="pep-missing-data" hidden>
+                <strong>Missing required data</strong>
+                <ul id="pepMissingInputDataList"></ul>
+              </div>
             </div>
           </section>
 
-        </div>
+          <aside id="pepWarnings"
+                 class="pep-alert pep-alert--warning"
+                 aria-labelledby="pepWarningsTitle"
+                 hidden>
+            <div class="pep-alert-icon" aria-hidden="true">!</div>
+            <div>
+              <h3 id="pepWarningsTitle">Red Flags</h3>
+              <p>
+                Potential data gaps were detected in the source documents. These items do not
+                block PEP generation, but they should be reviewed.
+              </p>
+              <ul id="pepWarningsList"></ul>
+            </div>
+          </aside>
+
+          <div class="pep-result-actions">
+<!--
+<button class="btn btn-tertiary" type="button" id="viewJsonBtn">
+  View technical details
+</button>
+-->
+
+            <button class="btn btn-primary" type="button" id="generatePepBtn">
+              Download PEP
+            </button>
+          </div>
+        </section>
       </section>
     </div>
   </main>
 
   <div class="beecker-overlay" id="overlay" aria-hidden="true">
-    <div class="beecker-overlay-card" role="status" aria-live="polite" aria-atomic="true">
+    <div class="beecker-overlay-card"
+         role="status"
+         aria-live="polite"
+         aria-atomic="true">
       <div class="beecker-loader-row">
         <div class="beecker-spinner" aria-hidden="true"></div>
         <div>
@@ -372,12 +420,14 @@ Trazabilidad Técnica:
             Processing documents
           </div>
           <div class="beecker-loader-sub" id="progressText">
-            Please do not close this window.
+            Keep this tab open while the process is running.
           </div>
         </div>
       </div>
 
-      <div class="beecker-progress-bar">
+      <div class="beecker-progress-bar"
+           role="progressbar"
+           aria-label="Processing">
         <div class="beecker-progress" id="progressBar"></div>
       </div>
     </div>

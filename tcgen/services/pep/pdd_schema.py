@@ -14,12 +14,14 @@ from pydantic import (
     ConfigDict,
     Field,
     field_validator,
+    model_validator,
 )
 
 
 AnalysisStatus = Literal["completado"]
 CalculationStatus = Literal["ok", "error_validacion"]
 StressBase = Literal["periodo_normal", "periodo_maximo"]
+TechnologyDetection = Literal["explicita", "inferida", "no_encontrada"]
 
 MissingField = Literal[
     "descripcion_breve_proceso",
@@ -30,6 +32,56 @@ MissingField = Literal[
 CalculationType = Literal["estres", "verificacion"]
 
 
+class TechnologyData(BaseModel):
+    """
+    Tecnología detectada desde el PDD/FDD.
+
+    La tecnología debe representar la herramienta, plataforma, framework,
+    producto o entorno usado para construir la solución.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    valor: str | None
+    tipo_deteccion: TechnologyDetection
+    justificacion: str | None
+
+    @model_validator(mode="after")
+    def validate_technology_consistency(self) -> "TechnologyData":
+        """
+        Valida coherencia entre valor, tipo de detección y justificación.
+        """
+        if self.tipo_deteccion == "no_encontrada":
+            if self.valor is not None:
+                raise ValueError(
+                    "tecnologia.valor debe ser null cuando "
+                    "tipo_deteccion es no_encontrada."
+                )
+
+            if self.justificacion is not None:
+                raise ValueError(
+                    "tecnologia.justificacion debe ser null cuando "
+                    "tipo_deteccion es no_encontrada."
+                )
+
+            return self
+
+        if not (self.valor or "").strip():
+            raise ValueError(
+                "tecnologia.valor es obligatorio cuando la tecnología "
+                "fue explícita o inferida."
+            )
+
+        if self.tipo_deteccion == "inferida":
+            if not (self.justificacion or "").strip():
+                raise ValueError(
+                    "tecnologia.justificacion es obligatoria cuando "
+                    "la tecnología fue inferida."
+                )
+
+        return self
+
+
 class ProcessQuantityData(BaseModel):
     """
     Cantidad de elementos procesados durante un periodo.
@@ -37,7 +89,7 @@ class ProcessQuantityData(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    cantidad: int | None = Field(default=None, gt=0)
+    cantidad: float | None = Field(default=None, gt=0)
     unidad_elemento: str | None = None
 
     @field_validator("unidad_elemento")
@@ -124,13 +176,14 @@ class DevelopmentPlanData(BaseModel):
 
 class DeploymentPlanData(BaseModel):
     """
-    Alternativas de insumos para Deployment.
+    Insumos para Deployment/UAT.
+
+    Deployment debe considerar únicamente el escenario productivo al 120%.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    cambio_entorno_o_insumos: TypedPercentageQuantityData
-    mismo_entorno_e_insumos: TypedPercentageQuantityData
+    uat_productivo: TypedPercentageQuantityData
 
 
 class CalculationTraceData(BaseModel):
@@ -141,7 +194,7 @@ class CalculationTraceData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     calculo: str | None = None
-    valor_base: int = Field(ge=0)
+    valor_base: float = Field(ge=0)
     porcentaje_aplicado: int = Field(ge=0)
     resultado_sin_redondear: float = Field(ge=0)
     resultado_final: int = Field(ge=0)
@@ -163,6 +216,7 @@ class SupplyPlanData(BaseModel):
     deployment: DeploymentPlanData
     trazabilidad_calculos: list[CalculationTraceData]
     criterio_calculo: str | None = None
+    nota_deployment: str | None = None
 
 
 class SupplyCalculationData(BaseModel):
@@ -187,6 +241,7 @@ class PddAnalysisData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     estado_analisis: AnalysisStatus
+    tecnologia: TechnologyData
     requerimientos: list[str]
     contexto_proceso: ProcessContextData
     calculo_insumos: SupplyCalculationData
